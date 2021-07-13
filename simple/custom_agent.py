@@ -34,7 +34,7 @@ class RuleBasedAgent:
         self.w, self.h = self.game_state.map.width, self.game_state.map.height
 
         self.my_cities_mat = np.zeros((self.w, self.h), dtype=bool)
-        self.available_mat = np.ones((self.w, self.h), dtype=bool)
+        self.occupied_mat = np.zeros((self.w, self.h), dtype=bool)
 
     def __call__(self, obs, conf) -> List[str]:
         self.preprocess(obs, conf)
@@ -46,7 +46,7 @@ class RuleBasedAgent:
                 cell = self.game_state.map.get_cell(x, y)
                 if cell.has_resource():
                     resource_tiles.append(cell)
-        
+
         cities_to_build = 0
         for k, city in self.me.cities.items():
             if city.fuel > city.get_light_upkeep() * GAME_CONSTANTS["PARAMETERS"]["NIGHT_LENGTH"] + 1000:
@@ -62,7 +62,6 @@ class RuleBasedAgent:
 
         # we iterate over all our units and do something with them
         for unit in self.me.units:
-            actions.append(annotate.sidetext(f"Turn: {self.game_state.turn}"))
             if self.game_state.turn % 5 == 0:
                 actions.append(unit.move(DIRECTIONS.WEST))
             elif obs.player == 0:
@@ -121,6 +120,7 @@ class RuleBasedAgent:
         actions.append(annotate.sidetext(f"Research points: {player.research_points}"))
         """
 
+        actions.append(annotate.sidetext(f"Turn: {self.game_state.turn}"))
         return actions
 
     def preprocess(self, obs, conf) -> NoReturn:
@@ -136,10 +136,14 @@ class RuleBasedAgent:
         for city_tile in [c for city in self.me.cities.values() for c in city.citytiles]:
             self.my_cities_mat[city_tile.pos.x, city_tile.pos.y] = True
 
-        self.available_mat[:] = True
+        self.occupied_mat[:] = False
         for unit in self.me.units:
             if not unit.can_act():
-                self.available_mat[unit.pos.x, unit.pos.y] = False
+                self.occupied_mat[unit.pos.x, unit.pos.y] = True
+
+    @property
+    def available_mat(self) -> np.ndarray:
+        return ~self.occupied_mat | self.my_cities_mat
 
 
 def agent(obs, conf) -> List[str]:
