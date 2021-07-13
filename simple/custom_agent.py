@@ -33,8 +33,8 @@ class RuleBasedAgent:
         self.opp = self.game_state.players[(obs.player + 1) % 2]
         self.w, self.h = self.game_state.map.width, self.game_state.map.height
 
-        self.my_cities_mat = np.zeros(self.w, self.h).astype(bool)
-        self.available_mat = np.ones(self.w, self.h).astype(bool)
+        self.my_cities_mat = np.zeros((self.w, self.h), dtype=bool)
+        self.available_mat = np.ones((self.w, self.h), dtype=bool)
 
     def __call__(self, obs, conf) -> List[str]:
         self.preprocess(obs, conf)
@@ -46,7 +46,7 @@ class RuleBasedAgent:
                 cell = self.game_state.map.get_cell(x, y)
                 if cell.has_resource():
                     resource_tiles.append(cell)
-        self.game_state.map.get_cell()
+        
         cities_to_build = 0
         for k, city in self.me.cities.items():
             if city.fuel > city.get_light_upkeep() * GAME_CONSTANTS["PARAMETERS"]["NIGHT_LENGTH"] + 1000:
