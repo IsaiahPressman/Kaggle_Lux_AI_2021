@@ -1,16 +1,39 @@
 import atexit
+from enum import auto, Enum
 import gym
 import json
+
+import numpy as np
+from kaggle_environments import make
 import math
 from pathlib import Path
 import random
 from scipy.stats import rankdata
 from subprocess import Popen, PIPE
-from typing import *
+from typing import Optional, NoReturn
 
 from .lux.game import Game
 
 DIR_PATH = Path(__file__).parent
+
+
+class ObsType(Enum):
+    """
+    An enum of all available obs_types
+    WARNING: enum order is subject to change
+    """
+    MULTIHOT_PADDED_OBS = auto()
+
+    def get_obs_spec(self) -> tuple[int, ...]:
+        if self == ObsType.MULTIHOT_OBS:
+            # 32x32 grid of categorical embeddings
+            # 32x32 grid of multiplications?
+            # ^ This should all be doable with a single matmul operation
+            # Also, include turn info, day/night info, and time until day/night info?
+            # ^ How to encode this info, perhaps another separate obs dimension?
+            return gym.spaces # TODO
+        else:
+            raise NotImplementedError(f'ObsType not yet implemented: {self.name}')
 
 
 def cleanup_dimensions_factory(dimension_process: Popen) -> NoReturn:
@@ -20,18 +43,22 @@ def cleanup_dimensions_factory(dimension_process: Popen) -> NoReturn:
     return cleanup_dimensions
 
 
-class LuxEnv(gym.Env):
+class _LuxEnvRaw(gym.Env):
     metadata = {'render.modes': []}
 
-    def __init__(self, configuration):
-        super(LuxEnv, self).__init__()
-        # TODO: Define action and observation space using gym.spaces
+    def __init__(self, configuration: Optional[dict[str, any]] = None, seed: Optional[int] = None):
+        super(_LuxEnvRaw, self).__init__()
         self.action_space = None
         self.observation_space = None
 
         self.game_state = Game()
-        self.configuration = configuration
-        if "seed" not in self.configuration:
+        if configuration is not None:
+            self.configuration = configuration
+        else:
+            self.configuration = make("lux_ai_2021").configuration
+        if seed is not None:
+            self.configuration["seed"] = seed
+        elif "seed" not in self.configuration:
             self.configuration["seed"] = math.floor(random.random() * 1e9)
         self.done = False
 
@@ -54,86 +81,74 @@ class LuxEnv(gym.Env):
         self.dimension_process.stdin.write((json.dumps(initiate) + "\n").encode())
         self.dimension_process.stdin.flush()
         agent1res = json.loads(self.dimension_process.stdout.readline())
-        agent2res = json.loads(self.dimension_process.stdout.readline())
-
-        """
-        player1.observation.player = 0
-        player2.observation.player = 1
-        player1.observation.updates = agent1res
-        player2.observation.updates = agent2res
-        """
+        _ = self.dimension_process.stdout.readline()
 
         self.game_state = Game()
         self.game_state._initialize(agent1res)
+        self.game_state._update(agent1res[2:])
         self.done = False
 
         return self.obs, [0., 0.], self.done, self.info
 
-    def step(self, action):
-        # TODO: Convert actions to action list
+    def step(self, action: list[list[str]]):
         # 2.: Pass in actions (json representation along with id of who made that action),
         #       and agent information (id, status) to dimensions via stdin
-        # TODO: Construct state dictionary
+        # TODO: Does state need to include info other than actions?
+        assert len(action) == 2
+        state = [{'action': a} for a in action]
         self.dimension_process.stdin.write((json.dumps(state) + "\n").encode())
         self.dimension_process.stdin.flush()
 
         # 3.1 : Receive and parse the observations returned by dimensions via stdout
         agent1res = json.loads(self.dimension_process.stdout.readline())
-        agent2res = json.loads(self.dimension_process.stdout.readline())
+        _ = self.dimension_process.stdout.readline()
         self.game_state._update(agent1res)
 
         # Check if done
         match_status = json.loads(self.dimension_process.stdout.readline())
         self.done = match_status["status"] == "finished"
 
-        """
-        # 3.2: Send observations to each agent through here. 
-        #       Like dimensions, first observation can include initialization stuff, then we do the looping
-        player1.observation.updates = agent1res
-        player2.observation.updates = agent2res
-
-        player1.observation.player = 0
-        player2.observation.player = 1
-        """
-
         # 3.3 : handle rewards when done
         if self.done:
             # reward here is defined as the sum of number of city tiles with unit count as a tie-breaking mechanism
             rewards = [int(compute_reward(p)) for p in self.game_state.players]
             rewards = (rankdata(rewards) - 1.) * 2. - 1.
+            rewards = list(rewards)
         else:
             rewards = [0., 0.]
 
         return self.obs, rewards, self.done, self.info
 
+    def render(self, mode='human'):
+        raise NotImplementedError('LuxEnv rendering is not implemented. Use the Lux visualizer instead.')
+
     @property
-    def obs(self):
+    def obs(self) -> Game:
         # TODO: Process game_state into a numpy array in some capacity?
         # TODO: Or just leave that for a wrapper?
         return self.game_state
 
     @property
-    def info(self):
+    def info(self) -> dict[str, any]:
         # TODO
         return {}
 
-    def render(self, mode='human'):
-        raise NotImplementedError('LuxEnv rendering is not implemented. Use the Lux visualizer instead.')
 
+class LuxEnv(_LuxEnvRaw):
+    def __init__(self, obs_type: ObsType, *args, **kwargs):
+        super(LuxEnv, self).__init__(*args, **kwargs)
+        self.obs_type = obs_type
+        # TODO: Define action and observation space using gym.spaces
+        self.action_space = None
+        self.observation_space = None
 
-def interpreter(state, env):
-    player1 = state[0]
-    player2 = state[1]
+    @property
+    def obs(self) -> np.ndarray:
+        return
 
-
-    ### 1.2: Initialize a blank state game if new episode is starting ###
-    if env.done:
-
-        return state
-
-    ##
-
-    return state
+    @property
+    def info(self) -> dict[str, any]:
+        return
 
 
 def compute_reward(player):
