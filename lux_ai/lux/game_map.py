@@ -104,3 +104,6 @@ class Position:
 
     def __str__(self) -> str:
         return f"({self.x}, {self.y})"
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}: {str(self)}"
