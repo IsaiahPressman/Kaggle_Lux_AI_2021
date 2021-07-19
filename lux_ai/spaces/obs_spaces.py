@@ -31,7 +31,7 @@ RESOURCE_ENCODING = {
 }
 
 
-class ObsType(Enum):
+class ObsSpace(Enum):
     """
     An enum of all available obs_types
     WARNING: enum order is subject to change
@@ -45,7 +45,7 @@ class ObsType(Enum):
         y = board_dims[1]
         # Player count
         p = 2
-        if self == ObsType.FIXED_SHAPE_CONTINUOUS_OBS:
+        if self == ObsSpace.FIXED_SHAPE_CONTINUOUS_OBS:
             return gym.spaces.Dict({
                 # Player specific observations
                 # none, worker
@@ -93,13 +93,13 @@ class ObsType(Enum):
                 "turn": gym.spaces.Box(0., 1., shape=(1, 1))
             })
         else:
-            raise NotImplementedError(f'ObsType not yet implemented: {self.name}')
+            raise NotImplementedError(f'ObsSpace not yet implemented: {self.name}')
 
     def wrap_env(self, env) -> gym.ObservationWrapper:
-        if self == ObsType.FIXED_SHAPE_CONTINUOUS_OBS:
+        if self == ObsSpace.FIXED_SHAPE_CONTINUOUS_OBS:
             return _FixedShapeContinuousObs(env)
         else:
-            raise NotImplementedError(f'ObsType not yet implemented: {self.name}')
+            raise NotImplementedError(f'ObsSpace not yet implemented: {self.name}')
 
 
 class _FixedShapeContinuousObs(gym.ObservationWrapper):

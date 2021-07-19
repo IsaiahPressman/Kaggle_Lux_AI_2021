@@ -14,7 +14,7 @@ from typing import Optional, NoReturn
 
 from .lux.game import Game
 from .lux.game_objects import Unit
-from .spaces.obs_types import ObsType, MAX_BOARD_SIZE
+from .spaces.obs_spaces import ObsSpace, MAX_BOARD_SIZE
 from .spaces.act_spaces import get_action_space, get_unit_action, get_city_tile_action
 
 DIR_PATH = Path(__file__).parent
@@ -49,7 +49,7 @@ class LuxEnv(gym.Env):
 
     def __init__(
             self,
-            obs_type: ObsType,
+            obs_type: ObsSpace,
             configuration: Optional[dict[str, any]] = None,
             seed: Optional[int] = None
     ):
