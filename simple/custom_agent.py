@@ -128,7 +128,6 @@ class RuleBasedAgent:
         self.game_state._update(obs["updates"])
 
         # Code starts here
-        # These lines are probably unnecessary
         self.me = self.game_state.players[obs.player]
         self.opp = self.game_state.players[(obs.player + 1) % 2]
 

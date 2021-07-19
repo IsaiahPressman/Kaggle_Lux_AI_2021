@@ -3,9 +3,9 @@ from enum import Enum, auto
 import gym
 import numpy as np
 
-from .lux.game import Game
-from .lux.constants import Constants
-from .lux.game_constants import GAME_CONSTANTS
+from ..lux.game import Game
+from ..lux.constants import Constants
+from ..lux.game_constants import GAME_CONSTANTS
 
 MAX_BOARD_SIZE = (32, 32)
 MAX_RESOURCE = {
@@ -40,9 +40,9 @@ class ObsType(Enum):
     VARIABLE_SHAPE_EMBEDDING_OBS = auto()
 
     # NB: Avoid using Discrete() space, as it returns a shape of ()
-    def get_obs_spec(self, board_size: tuple[int, int] = MAX_BOARD_SIZE) -> gym.spaces.Dict:
-        x = board_size[0]
-        y = board_size[1]
+    def get_obs_spec(self, board_dims: tuple[int, int] = MAX_BOARD_SIZE) -> gym.spaces.Dict:
+        x = board_dims[0]
+        y = board_dims[1]
         # Player count
         p = 2
         if self == ObsType.FIXED_SHAPE_CONTINUOUS_OBS:
