@@ -16,8 +16,7 @@ from ..lux.game import Game
 from ..lux.game_constants import GAME_CONSTANTS
 from ..lux.game_objects import Unit, CityTile
 from ..lux_gym.obs_spaces import ObsSpace, MAX_BOARD_SIZE
-from ..lux_gym.act_spaces import get_action_space, get_unit_action, get_city_tile_action, \
-    ACTION_MEANINGS, ACTION_MEANINGS_TO_IDX, DIRECTIONS, RESOURCES
+from ..lux_gym.act_spaces import BasicActionSpace, ACTION_MEANINGS, ACTION_MEANINGS_TO_IDX, DIRECTIONS, RESOURCES
 
 DIR_PATH = Path(__file__).parent
 
@@ -63,11 +62,11 @@ class LuxEnv(gym.Env):
             self,
             obs_type: ObsSpace,
             configuration: Optional[dict[str, any]] = None,
-            seed: Optional[int] = None
+            seed: Optional[int] = None,
     ):
         super(LuxEnv, self).__init__()
         self.obs_type = obs_type
-        self.action_space = get_action_space()
+        self.action_space = BasicActionSpace()
         self.observation_space = self.obs_type.get_obs_spec()
         self.board_dims = MAX_BOARD_SIZE
 
@@ -77,9 +76,9 @@ class LuxEnv(gym.Env):
         else:
             self.configuration = make("lux_ai_2021").configuration
         if seed is not None:
-            self.configuration["seed"] = seed
+            self.seed(seed)
         elif "seed" not in self.configuration:
-            self.configuration["seed"] = math.floor(random.random() * 1e9)
+            self.seed()
         self.done = False
         self.info = {}
         self.pos_to_unit_dict = {}
@@ -111,15 +110,15 @@ class LuxEnv(gym.Env):
         self.game_state._update(agent1res[2:])
         self.done = False
         self.board_dims = (self.game_state.map_height, self.game_state.map_width)
-        self.action_space = get_action_space(self.board_dims)
         self.observation_space = self.obs_type.get_obs_spec(self.board_dims)
         self.info = {
             "actions_taken": {
-                key: np.zeros(space.shape, dtype=bool) for key, space in self.action_space.spaces.items()
+                key: np.zeros(space.shape, dtype=bool)
+                for key, space in self.action_space.get_action_space(self.board_dims).spaces.items()
             },
             "available_actions_mask": {
                 key: np.ones(space.shape + (len(ACTION_MEANINGS[key]),), dtype=bool)
-                for key, space in self.action_space.spaces.items()
+                for key, space in self.action_space.get_action_space(self.board_dims).spaces.items()
             }
         }
         self.pos_to_unit_dict = _generate_pos_to_unit_dict(self.game_state)
@@ -129,7 +128,14 @@ class LuxEnv(gym.Env):
         return self.obs, [0., 0.], self.done, copy.copy(self.info)
 
     def step(self, action: dict[str, np.ndarray]):
-        self._step(self._process_actions(action))
+        actions_processed, actions_taken = self.action_space.process_actions(
+            action,
+            self.game_state,
+            self.board_dims,
+            self.pos_to_unit_dict
+        )
+        self._step(actions_processed)
+        self.info["actions_taken"] = actions_taken
         self.pos_to_unit_dict = _generate_pos_to_unit_dict(self.game_state)
         self.pos_to_city_tile_dict = _generate_pos_to_city_tile_dict(self.game_state)
         self._update_available_actions_mask()
@@ -143,51 +149,7 @@ class LuxEnv(gym.Env):
         else:
             rewards = [0., 0.]
 
-        return self.obs, rewards, self.done, self.info
-
-    def _process_actions(self, action_tensors_dict: dict[str, np.ndarray]) -> list[list[str]]:
-        action_strs = [[], []]
-        self.info["actions_taken"] = {
-            key: np.zeros(space.shape, dtype=bool) for key, space in self.action_space.spaces.items()
-        }
-        for player in self.game_state.players:
-            p_id = player.team
-            worker_actions_taken_count = np.zeros(self.board_dims, dtype=int)
-            cart_actions_taken_count = np.zeros_like(worker_actions_taken_count)
-            for unit in player.units:
-                if unit.can_act():
-                    x, y = unit.pos.x, unit.pos.y
-                    if unit.is_worker():
-                        unit_type = "worker"
-                        actions_taken_count = worker_actions_taken_count
-                    elif unit.is_cart():
-                        unit_type = "cart"
-                        actions_taken_count = cart_actions_taken_count
-                    else:
-                        raise NotImplementedError(f'New unit type: {unit}')
-                    # Action plane is selected for stacked units
-                    action_plane = actions_taken_count[x, y]
-                    action_idx = action_tensors_dict[unit_type][action_plane, p_id, x, y]
-                    action = get_unit_action(unit, action_idx, self.pos_to_unit_dict)
-                    self.info["actions_taken"][unit_type][action_plane, p_id, x, y] = True
-                    # None means no-op
-                    # "" means invalid transfer action - fed to game as no-op
-                    if action is not None and action != "":
-                        # noinspection PyTypeChecker
-                        action_strs[p_id].append(action)
-                    actions_taken_count[x, y] += 1
-            for city in player.cities.values():
-                for city_tile in city.citytiles:
-                    if city_tile.can_act():
-                        x, y = city_tile.pos.x, city_tile.pos.y
-                        action_idx = action_tensors_dict["city_tile"][0, p_id, x, y]
-                        action = get_city_tile_action(city_tile, action_idx)
-                        self.info["actions_taken"]["city_tile"][0, p_id, x, y] = True
-                        # None means no-op
-                        if action is not None:
-                            # noinspection PyTypeChecker
-                            action_strs[p_id].append(action)
-        return action_strs
+        return self.obs, rewards, self.done, copy.copy(self.info)
 
     def _step(self, action: list[list[str]]) -> NoReturn:
         # 2.: Pass in actions (json representation along with id of who made that action),
@@ -210,7 +172,7 @@ class LuxEnv(gym.Env):
     def _update_available_actions_mask(self) -> NoReturn:
         self.info["available_actions_mask"] = {
             key: np.ones(space.shape + (len(ACTION_MEANINGS[key]),), dtype=bool)
-            for key, space in self.action_space.spaces.items()
+            for key, space in self.action_space.get_action_space(self.board_dims).spaces.items()
         }
         for player in self.game_state.players:
             p_id = player.team
@@ -319,6 +281,16 @@ class LuxEnv(gym.Env):
                                 y,
                                 ACTION_MEANINGS_TO_IDX["city_tile"]["BUILD_CART"]
                             ] = False
+
+    def seed(self, seed: Optional[int] = None) -> NoReturn:
+        if seed is not None:
+            # Seed is incremented on reset()
+            self.configuration["seed"] = seed - 1
+        else:
+            self.configuration["seed"] = math.floor(random.random() * 1e9)
+
+    def get_seed(self) -> int:
+        return self.configuration["seed"]
 
     def render(self, mode='human'):
         raise NotImplementedError('LuxEnv rendering is not implemented. Use the Lux visualizer instead.')
