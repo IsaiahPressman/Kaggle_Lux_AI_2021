@@ -169,4 +169,4 @@ class _FixedShapeContinuousObs(gym.ObservationWrapper):
 
     @property
     def observation_space(self):
-        return self.env.observation_space
+        return self.unwrapped.observation_space
