@@ -40,7 +40,7 @@ class DictActor(nn.Module):
             ) for key, n_act in self.n_actions.items()
         })
 
-    def forward(self, x: torch.Tensor) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
+    def forward(self, x: torch.Tensor, sample: bool) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
         policy_logits_out = {}
         actions_out = {}
         b, _, h, w = x.shape
@@ -49,13 +49,16 @@ class DictActor(nn.Module):
             action_plane_shape = self.action_plane_shapes[key]
             logits = actor(x).view(b, n_actions, *action_plane_shape, h, w)
             # Move the logits dimension to the end
-            actions = self.logits_to_actions(logits.permute(0, 2, 3, 4, 5, 1).view(-1, n_actions))
+            actions = DictActor.logits_to_actions(logits.permute(0, 2, 3, 4, 5, 1).view(-1, n_actions), sample)
             policy_logits_out[key] = logits
             actions_out[key] = actions
+        # TODO: Reshape out to shape (batch, player, n_actions, x, y)
+        # TODO: Alternately just (batch, *action_plane_shape, x, y)?
         return policy_logits_out, actions_out
 
-    def logits_to_actions(self, logits: torch.Tensor) -> torch.Tensor:
-        if self.training:
+    @staticmethod
+    def logits_to_actions(logits: torch.Tensor, sample: bool) -> torch.Tensor:
+        if sample:
             return torch.multinomial(F.softmax(logits, dim=-1), num_samples=1)
         else:
             return logits.argmax(dim=-1)
@@ -66,7 +69,7 @@ class ValueActivation(nn.Module):
         super(ValueActivation, self).__init__()
         self.dim = dim
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor):
         # Rescale to [-1, 1]
         return 2 * F.softmax(x, self.dim) - 1.
 
@@ -101,12 +104,23 @@ class BasicActorCriticNetwork(nn.Module):
         baseline_layers.append(final_value_activation)
         self.baseline = nn.Sequential(*baseline_layers)
 
-    def forward(self, x: torch.Tensor, input_mask: torch.Tensor) -> dict[str, Any]:
+    def forward(
+            self,
+            x: Union[torch.Tensor, dict[str, torch.Tensor]],
+            input_mask: torch.Tensor,
+            sample: bool = True
+    ) -> dict[str, Any]:
         base_out, _ = self.base(x, input_mask)
-        policy_logits, actions = self.actor(base_out)
+        policy_logits, actions = self.actor(base_out, sample)
         baseline = self.baseline(base_out)
         return dict(
             actions=actions,
             policy_logits=policy_logits,
             baseline=baseline
         )
+
+    def sample_actions(self, *args, **kwargs):
+        return self.forward(*args, sample=True, **kwargs)
+
+    def select_best_actions(self, *args, **kwargs):
+        return self.forward(*args, sample=False, **kwargs)

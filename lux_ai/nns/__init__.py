@@ -13,26 +13,50 @@
 # limitations under the License.
 
 from omegaconf import OmegaConf
+from pathlib import Path
 import torch
+from torch import nn
+from typing import *
 
-from . import models
+from ..lux_gym.obs_spaces import ObsSpace, MAX_BOARD_SIZE
+from ..lux_gym import act_spaces
+from .models import BasicActorCriticNetwork
+from .in_blocks import ConvEmbeddingInputLayer
+from .conv_blocks import FullConvResidualBlock
 
-# TODO: Model creation
-def create_model(flags, device):
-    model_string =
-    if flags.model_ == "baseline":
-        model_cls = BaselineNet
+
+def create_model(flags, device: torch.device) -> nn.Module:
+    obs_space = ObsSpace[flags.obs_space]
+    act_space = act_spaces.__dict__[flags.act_space]()
+    assert isinstance(act_space, act_spaces.BaseActSpace), f"{act_space}"
+
+    if flags.model_arch == "dummy_conv_model":
+        base_model = nn.Sequential(
+            ConvEmbeddingInputLayer(
+                obs_space=obs_space,
+                embedding_dim=flags.dim,
+                use_index_select=flags.use_index_select
+            ),
+            FullConvResidualBlock(
+                in_channels=flags.dim,
+                out_channels=flags.dim,
+                height=MAX_BOARD_SIZE[0],
+                width=MAX_BOARD_SIZE[1]
+            ),
+        )
+        model = BasicActorCriticNetwork(
+            base_model=base_model,
+            base_out_channels=flags.dim,
+            action_space=act_space
+        )
     else:
-        raise NotImplementedError("model=%s" % model_string)
+        raise NotImplementedError(f"Model_arch: {flags.model_arch}")
 
-    action_space = ENVS[flags.env](savedir=None, archivefile=None)._actions
-
-    model = model_cls(DUNGEON_SHAPE, action_space, flags, device)
     model.to(device=device)
     return model
 
 
-def load_model(load_dir, device):
+def load_model(load_dir: Union[Path, str], device: torch.device):
     flags = OmegaConf.load(load_dir + "/config.yaml")
     flags.checkpoint = load_dir + "/checkpoint.tar"
     model = create_model(flags, device)
