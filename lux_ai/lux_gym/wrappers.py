@@ -1,3 +1,4 @@
+import copy
 import gym
 import numpy as np
 import torch
@@ -10,24 +11,32 @@ class PadEnv(gym.Wrapper):
     def __init__(self, env: gym.Env, max_board_size: tuple[int, int] = MAX_BOARD_SIZE):
         super(PadEnv, self).__init__(env)
         self.max_board_size = max_board_size
-        self.observation_space = self.unwrapped.obs_type.get_obs_spec(max_board_size)
-        self.board_mask = np.zeros(max_board_size, dtype=bool)
-        self.board_mask[:self.orig_board_dims[0], :self.orig_board_dims[1]] = 1
+        self.observation_space = self.unwrapped.obs_space.get_obs_spec(max_board_size)
+        self.input_mask = np.zeros((1,) + max_board_size, dtype=bool)
+        self.input_mask[:, self.orig_board_dims[0], :self.orig_board_dims[1]] = 1
+
+    def _pad(self, arr: np.ndarray) -> np.ndarray:
+        return np.pad(arr, pad_width=self.pad_width, constant_values=0.)
 
     def observation(self, observation: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
         return {
-            key: np.pad(val, pad_width=self.pad_width, constant_values=0.) for key, val in observation.items()
+            key: self._pad(val) for key, val in observation.items()
         }
 
     def info(self, info: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
-        assert "board_mask" not in info.keys()
-        info["board_mask"] = self.board_mask
+        info = copy.copy(info)
+        info = {
+            key: self._pad(val) if val.shape[-2:] == self.orig_board_dims else val
+            for key, val in info.items()
+        }
+        assert "input_mask" not in info.keys()
+        info["input_mask"] = self.input_mask
         return info
 
     def reset(self, **kwargs):
         obs, reward, done, info = super(PadEnv, self).reset(**kwargs)
-        self.board_mask[:] = 0
-        self.board_mask[:self.orig_board_dims[0], :self.orig_board_dims[1]] = 1
+        self.input_mask[:] = 0
+        self.input_mask[:, self.orig_board_dims[0], :self.orig_board_dims[1]] = 1
         return self.observation(obs), reward, done, self.info(info)
 
     def step(self, action: dict[str, np.ndarray]):
@@ -49,6 +58,39 @@ class PadEnv(gym.Wrapper):
             (0, self.max_board_size[0] - self.orig_board_dims[0]),
             (0, self.max_board_size[1] - self.orig_board_dims[1])
         )
+
+
+class LoggingEnv(gym.Wrapper):
+    def __init__(self, env: gym.Env):
+        super(LoggingEnv, self).__init__(env)
+        self.peak_city_tile_count = np.array([1., 1.])
+        # TODO: Resource mining % like in visualizer
+        # self.resource_count = {"wood", etc...}
+
+    def info(self, info: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+        info = copy.copy(info)
+        game_state = self.env.unwrapped.game_state
+        logs = {
+            "step": [game_state.turn],
+            "city_tiles": [p.city_tile_count for p in game_state.players],
+            "separate_cities": [len(p.cities) for p in game_state.players],
+            "workers": [sum(u.is_worker() for u in p.units) for p in game_state.players],
+            "carts": [sum(u.is_cart() for u in p.units) for p in game_state.players],
+            "research_points": [p.research_points for p in game_state.players],
+        }
+        self.peak_city_tile_count = np.maximum(self.peak_city_tile_count, logs["n_city_tiles"])
+        logs["peak_city_tiles"] = self.peak_city_tile_count.copy()
+        info.update({f"logging_{key}": np.array(val) for key, val in logs.items()})
+        return info
+
+    def reset(self, **kwargs):
+        obs, reward, done, info = super(LoggingEnv, self).reset(**kwargs)
+        self.peak_city_tile_count[:] = 1.
+        return obs, reward, done, self.info(info)
+
+    def step(self, action: dict[str, np.ndarray]):
+        obs, reward, done, info = super(LoggingEnv, self).step(action)
+        return obs, reward, done, self.info(info)
 
 
 class VecEnv:
@@ -89,7 +131,7 @@ class VecEnv:
         self.last_outs = [env.step(a) for env, a in zip(self.envs, actions)]
         return VecEnv._vectorize_env_outs(self.last_outs)
 
-    def render(self, idx: int, mode: str = 'human', **kwargs):
+    def render(self, idx: int, mode: str = "human", **kwargs):
         # noinspection PyArgumentList
         return self.envs[idx].render(mode, **kwargs)
 
@@ -117,7 +159,7 @@ class VecEnv:
 
 
 class PytorchEnv(gym.Wrapper):
-    def __init__(self, env: Union[gym.Env, VecEnv], device: torch.device = torch.device('cpu')):
+    def __init__(self, env: Union[gym.Env, VecEnv], device: torch.device = torch.device("cpu")):
         super(PytorchEnv, self).__init__(env)
         self.device = device
         

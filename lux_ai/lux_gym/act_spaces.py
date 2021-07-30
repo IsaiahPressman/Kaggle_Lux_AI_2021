@@ -133,7 +133,7 @@ for u in ["worker", "cart"]:
         ACTION_MEANING_TO_FUNC[a] = _move_factory(a)
 
 
-class ActSpace(ABC):
+class BaseActSpace(ABC):
     @abstractmethod
     def get_action_space(self, board_dims: tuple[int, int] = MAX_BOARD_SIZE) -> gym.spaces.Dict:
         pass
@@ -185,7 +185,7 @@ class ActSpace(ABC):
             }
 
 
-class BasicActionSpace(ActSpace):
+class BasicActionSpace(BaseActSpace):
     def __init__(self, default_board_dims: Optional[tuple[int, int]] = None):
         self.default_board_dims = MAX_BOARD_SIZE if default_board_dims is None else default_board_dims
 

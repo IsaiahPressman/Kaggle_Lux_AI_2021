@@ -31,15 +31,17 @@ RESOURCE_ENCODING = {
 }
 
 
+# TODO: Refactor ObsSpace to use inheritance like ActSpace does?
 class ObsSpace(Enum):
     """
-    An enum of all available obs_types
+    An enum of all available obs_spaces
     WARNING: enum order is subject to change
     """
     FIXED_SHAPE_CONTINUOUS_OBS = auto()
     VARIABLE_SHAPE_EMBEDDING_OBS = auto()
 
     # NB: Avoid using Discrete() space, as it returns a shape of ()
+    # NB: "_COUNT" keys indicate that the value is used to scale the embedding of another value
     def get_obs_spec(self, board_dims: tuple[int, int] = MAX_BOARD_SIZE) -> gym.spaces.Dict:
         x = board_dims[0]
         y = board_dims[1]
@@ -53,8 +55,8 @@ class ObsSpace(Enum):
                 # none, cart
                 "cart": gym.spaces.MultiBinary((1, p, x, y)),
                 # Number of units in the square (only relevant on city tiles)
-                "worker_count": gym.spaces.Box(0., float("inf"), shape=(1, p, x, y)),
-                "cart_count": gym.spaces.Box(0., float("inf"), shape=(1, p, x, y)),
+                "worker_COUNT": gym.spaces.Box(0., float("inf"), shape=(1, p, x, y)),
+                "cart_COUNT": gym.spaces.Box(0., float("inf"), shape=(1, p, x, y)),
                 # NB: cooldowns and cargo are always zero when on city tiles, so one layer will do for
                 # the entire map
                 # Normalized from 0-3

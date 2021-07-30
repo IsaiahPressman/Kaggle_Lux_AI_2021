@@ -47,11 +47,11 @@ class FullConvResidualBlock(nn.Module):
         self.act1 = activation()
 
         self.conv2 = nn.Conv2d(
-                in_channels=in_channels,
-                out_channels=out_channels,
-                padding=padding,
-                **conv2d_kwargs
-            )
+            in_channels=in_channels,
+            out_channels=out_channels,
+            padding=padding,
+            **conv2d_kwargs
+        )
         self.norm2 = nn.LayerNorm([in_channels, height, width]) if normalize else nn.Identity()
         self.final_act = activation()
 

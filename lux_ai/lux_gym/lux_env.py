@@ -56,18 +56,18 @@ def _generate_pos_to_city_tile_dict(game_state: Game) -> dict[tuple, Optional[Ci
 
 
 class LuxEnv(gym.Env):
-    metadata = {'render.modes': []}
+    metadata = {"render.modes": []}
 
     def __init__(
             self,
-            obs_type: ObsSpace,
+            obs_space: ObsSpace,
             configuration: Optional[dict[str, any]] = None,
             seed: Optional[int] = None,
     ):
         super(LuxEnv, self).__init__()
-        self.obs_type = obs_type
+        self.obs_space = obs_space
         self.action_space = BasicActionSpace()
-        self.observation_space = self.obs_type.get_obs_spec()
+        self.observation_space = self.obs_space.get_obs_spec()
         self.board_dims = MAX_BOARD_SIZE
 
         self.game_state = Game()
@@ -110,7 +110,7 @@ class LuxEnv(gym.Env):
         self.game_state._update(agent1res[2:])
         self.done = False
         self.board_dims = (self.game_state.map_height, self.game_state.map_width)
-        self.observation_space = self.obs_type.get_obs_spec(self.board_dims)
+        self.observation_space = self.obs_space.get_obs_spec(self.board_dims)
         self.info = {
             "actions_taken": {
                 key: np.zeros(space.shape, dtype=bool)
@@ -184,7 +184,7 @@ class LuxEnv(gym.Env):
                     elif unit.is_cart():
                         unit_type = "cart"
                     else:
-                        raise NotImplementedError(f'New unit type: {unit}')
+                        raise NotImplementedError(f"New unit type: {unit}")
                     # No-op is always a legal action
                     # Moving is usually a legal action, except when:
                     #   The unit is at the edge of the board and would try to move off of it
