@@ -15,19 +15,22 @@ class PadEnv(gym.Wrapper):
         self.input_mask = np.zeros((1,) + max_board_size, dtype=bool)
         self.input_mask[:, :self.orig_board_dims[0], :self.orig_board_dims[1]] = 1
 
-    def _pad(self, arr: np.ndarray) -> np.ndarray:
-        return np.pad(arr, pad_width=self.pad_width, constant_values=0.)
+    def _pad(self, x: Union[dict, np.ndarray]) -> Union[dict, np.ndarray]:
+        if isinstance(x, dict):
+            return {key: self._pad(val) for key, val in x.items()}
+        elif x.ndim == 4 and x.shape[-2:] == self.orig_board_dims:
+            return np.pad(x, pad_width=self.pad_width, constant_values=0.)
+        else:
+            return x
 
-    def observation(self, observation: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+    def observation(self, observation: dict[str, Union[dict, np.ndarray]]) -> dict[str, np.ndarray]:
         return {
             key: self._pad(val) for key, val in observation.items()
         }
 
-    def info(self, info: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
-        info = copy.copy(info)
+    def info(self, info: dict[str, Union[dict, np.ndarray]]) -> dict[str, np.ndarray]:
         info = {
-            key: self._pad(val) if val.shape[-2:] == self.orig_board_dims else val
-            for key, val in info.items()
+            key: self._pad(val) for key, val in info.items()
         }
         assert "input_mask" not in info.keys()
         info["input_mask"] = self.input_mask
@@ -78,7 +81,7 @@ class LoggingEnv(gym.Wrapper):
             "carts": [sum(u.is_cart() for u in p.units) for p in game_state.players],
             "research_points": [p.research_points for p in game_state.players],
         }
-        self.peak_city_tile_count = np.maximum(self.peak_city_tile_count, logs["n_city_tiles"])
+        self.peak_city_tile_count = np.maximum(self.peak_city_tile_count, logs["city_tiles"])
         logs["peak_city_tiles"] = self.peak_city_tile_count.copy()
         info.update({f"logging_{key}": np.array(val) for key, val in logs.items()})
         return info
@@ -99,16 +102,19 @@ class VecEnv(gym.Env):
         self.last_outs = [() for _ in range(len(self.envs))]
 
     @staticmethod
+    def _stack_dict(x: list[Union[dict, np.ndarray]]) -> Union[dict, np.ndarray]:
+        if isinstance(x[0], dict):
+            return {key: VecEnv._stack_dict([i[key] for i in x]) for key in x[0].keys()}
+        else:
+            return np.stack([arr for arr in x], axis=0)
+
+    @staticmethod
     def _vectorize_env_outs(env_outs: list[tuple]) -> tuple:
         obs_list, reward_list, done_list, info_list = zip(*env_outs)
-        obs_stacked = {
-            key: np.stack([obs[key] for obs in obs_list], axis=0) for key in obs_list[0].keys()
-        }
+        obs_stacked = VecEnv._stack_dict(obs_list)
         reward_stacked = np.array(reward_list)
         done_stacked = np.array(done_list)
-        info_stacked = {
-            key: np.stack([info[key] for info in info_list], axis=0) for key in info_list[0].keys()
-        }
+        info_stacked = VecEnv._stack_dict(info_list)
         return obs_stacked, reward_stacked, done_stacked, info_stacked
 
     def reset(self, force: bool = False, **kwargs):
@@ -165,19 +171,20 @@ class PytorchEnv(gym.Wrapper):
         
     def reset(self, **kwargs):
         obs, reward, done, info = super(PytorchEnv, self).reset(**kwargs)
-        return self.to_tensor(obs), reward, done, self.to_tensor(info)
+        return self._to_tensor(obs), reward, done, self._to_tensor(info)
         
     def step(self, action: dict[str, torch.Tensor]):
         action = {
             key: val.cpu().numpy() for key, val in action.items()
         }
         obs, reward, done, info = super(PytorchEnv, self).step(action)
-        return self.to_tensor(obs), reward, done, self.to_tensor(info)
+        return self._to_tensor(obs), reward, done, self._to_tensor(info)
 
-    def to_tensor(self, d: dict[str, np.ndarray]) -> dict[str, torch.Tensor]:
-        return {
-            key: torch.from_numpy(val).to(self.device, non_blocking=True) for key, val in d.items()
-        }
+    def _to_tensor(self, x: dict[str, Union[dict, np.ndarray]]) -> dict[str, Union[dict, torch.Tensor]]:
+        if isinstance(x, dict):
+            return {key: self._to_tensor(val) for key, val in x.items()}
+        else:
+            return torch.from_numpy(x).to(self.device, non_blocking=True)
 
 
 class DictEnv(gym.Wrapper):
@@ -191,7 +198,7 @@ class DictEnv(gym.Wrapper):
             obs=obs,
             reward=reward,
             done=done,
-            **info
+            info=info
         )
 
     def reset(self, **kwargs):

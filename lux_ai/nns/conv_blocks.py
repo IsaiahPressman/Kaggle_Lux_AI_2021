@@ -28,6 +28,7 @@ class FullConvResidualBlock(nn.Module):
             out_channels: int,
             height: int,
             width: int,
+            kernel_size: int = 3,
             normalize: bool = False,
             activation: Callable = nn.ReLU,
             padding: Union[str, int, tuple[int, int]] = 'same',
@@ -39,6 +40,7 @@ class FullConvResidualBlock(nn.Module):
         self.conv1 = nn.Conv2d(
             in_channels=in_channels,
             out_channels=out_channels,
+            kernel_size=(kernel_size, kernel_size),
             padding=padding,
             **conv2d_kwargs
         )
@@ -49,6 +51,7 @@ class FullConvResidualBlock(nn.Module):
         self.conv2 = nn.Conv2d(
             in_channels=in_channels,
             out_channels=out_channels,
+            kernel_size=(kernel_size, kernel_size),
             padding=padding,
             **conv2d_kwargs
         )

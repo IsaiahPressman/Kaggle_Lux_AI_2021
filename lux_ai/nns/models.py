@@ -31,7 +31,7 @@ class DictActor(nn.Module):
         self.action_plane_shapes = {
             key: space.shape[:-2] for key, space in action_space.spaces.items()
         }
-        assert all([aps.ndim == 2 for aps in self.action_plane_shapes.values()])
+        assert all([len(aps) == 2 for aps in self.action_plane_shapes.values()])
         self.actors = nn.ModuleDict({
             key: nn.Conv2d(
                 in_channels,

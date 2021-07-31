@@ -35,7 +35,7 @@ def slice_buffers(buffers: Union[dict, torch.Tensor], s: slice) -> Union[dict, t
 
 
 def _create_buffers_from_specs(specs: dict[str, Union[dict, tuple, torch.dtype]]) -> Union[dict, torch.Tensor]:
-    if isinstance(specs, dict):
+    if isinstance(specs, dict) and "dtype" not in specs.keys():
         new_buffers = {}
         for key, val in specs.items():
             new_buffers[key] = _create_buffers_from_specs(val)
@@ -44,14 +44,14 @@ def _create_buffers_from_specs(specs: dict[str, Union[dict, tuple, torch.dtype]]
         return torch.empty(**specs).share_memory_()
 
 
-def _create_buffers_like(buffers: Union[dict, np.ndarray, torch.Tensor]) -> Union[dict, torch.Tensor]:
+def _create_buffers_like(buffers: Union[dict, torch.Tensor]) -> Union[dict, torch.Tensor]:
     if isinstance(buffers, dict):
         torch_buffers = {}
         for key, val in buffers.items():
             torch_buffers[key] = _create_buffers_like(val)
         return torch_buffers
     else:
-        return torch.empty_like(torch.tensor(buffers)).share_memory_()
+        return torch.empty_like(buffers).share_memory_()
 
 
 def create_buffers(flags, example_info: dict[str, Union[dict, np.ndarray, torch.Tensor]]) -> Buffers:
@@ -61,7 +61,7 @@ def create_buffers(flags, example_info: dict[str, Union[dict, np.ndarray, torch.
     specs = dict(
         observation={
             key: dict(size=(t + 1, n, *val.shape), dtype=torch.float32)
-            for key, val in flags.observation_space.get_obs_spec().spaces.items()
+            for key, val in flags.obs_space.get_obs_spec().spaces.items()
         },
         reward=dict(size=(t + 1, n, p), dtype=torch.float32),
         done=dict(size=(t + 1, n), dtype=torch.bool),

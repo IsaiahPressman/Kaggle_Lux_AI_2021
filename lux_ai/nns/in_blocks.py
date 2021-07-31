@@ -5,16 +5,27 @@ from torch import nn
 from typing import *
 
 
+def _index_select(embedding_layer: nn.Embedding, x: torch.Tensor) -> torch.Tensor:
+    out = embedding_layer.weight.index_select(0, x.view(-1))
+    return out.view(*x.size(), -1)
+
+
+def _forward_select(embedding_layer: nn.Embedding, x: torch.Tensor) -> torch.Tensor:
+    return embedding_layer(x)
+
+
 def _get_select_func(use_index_select: bool) -> Callable:
     """Use index select instead of default forward to possibly speed up embedding."""
     if use_index_select:
-        def select(embedding_layer: nn.Embedding, x: torch.Tensor) -> torch.Tensor:
-            out = embedding_layer.weight.index_select(0, x.view(-1))
-            return out.view(*x.size(), -1)
+        return _index_select
     else:
-        def select(embedding_layer: nn.Embedding, x: torch.Tensor) -> torch.Tensor:
-            return embedding_layer(x)
-    return select
+        return _forward_select
+
+
+class DictInputLayer(nn.Module):
+    @staticmethod
+    def forward(x: dict[str, Union[dict, torch.Tensor]]) -> tuple[dict[str, torch.Tensor], torch.Tensor]:
+        return x["obs"], x["info"]["input_mask"]
 
 
 class ConvEmbeddingInputLayer(nn.Module):

@@ -20,8 +20,8 @@ obs_space: FIXED_SHAPE_CONTINUOUS_OBS
 total_steps: 1e9
 num_actors: 16
 n_actor_envs: 16
-unroll_length: 40
-batch_size: 32
+unroll_length: 20
+batch_size: 2
 discounting: 0.99
 
 ## MODEL params
@@ -44,3 +44,4 @@ baseline_cost: 0.5
 # load_dir: null
 actor_device: cuda:1
 learner_device: cuda:0
+disable_wandb: True
