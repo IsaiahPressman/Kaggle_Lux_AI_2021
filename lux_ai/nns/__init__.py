@@ -6,14 +6,13 @@ from typing import *
 
 from ..lux_gym.obs_spaces import MAX_BOARD_SIZE
 from .models import BasicActorCriticNetwork
-from .in_blocks import DictInputLayer, ConvEmbeddingInputLayer
+from .in_blocks import ConvEmbeddingInputLayer
 from .conv_blocks import FullConvResidualBlock
 
 
 def create_model(flags, device: torch.device) -> nn.Module:
     if flags.model_arch == "dummy_conv_model":
         base_model = nn.Sequential(
-            DictInputLayer(),
             ConvEmbeddingInputLayer(
                 obs_space=flags.obs_space.get_obs_spec(),
                 embedding_dim=flags.dim,

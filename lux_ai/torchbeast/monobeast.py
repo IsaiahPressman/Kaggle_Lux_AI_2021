@@ -33,7 +33,7 @@ from torch import nn
 from torch.nn import functional as F
 
 from .core import prof, vtrace
-from .core.buffer_utils import Buffers, create_buffers, fill_buffers_inplace, stack_buffers, slice_buffers
+from .core.buffer_utils import Buffers, create_buffers, fill_buffers_inplace, stack_buffers, buffers_apply
 from ..lux_gym import create_env
 from ..nns import create_model
 
@@ -148,6 +148,8 @@ def act(
 
     except KeyboardInterrupt:
         pass  # Return silently.
+    # For debugging:
+    # except AssertionError as e:
     except Exception as e:
         logging.error("Exception in worker process %i", actor_index)
         traceback.print_exc()
@@ -172,7 +174,7 @@ def get_batch(
     for m in indices:
         free_queue.put(m)
     timings.time("enqueue")
-    batch = {k: t.to(device=flags.learner_device, non_blocking=True) for k, t in batch.items()}
+    batch = buffers_apply(batch, lambda x: x.to(device=flags.learner_device, non_blocking=True))
     timings.time("device")
     return batch
 
@@ -190,7 +192,11 @@ def learn(
     """Performs a learning (optimization) step."""
     with lock:
         with amp.autocast(enabled=flags.use_mixed_precision):
-            learner_outputs = learner_model(batch)
+            flattened_batch = buffers_apply(batch, lambda x: torch.flatten(x, start_dim=0, end_dim=1))
+            learner_outputs = learner_model(flattened_batch)
+            learner_outputs = buffers_apply(learner_outputs, lambda x: x.view(flags.unroll_length + 1,
+                                                                              flags.batch_size,
+                                                                              *x.shape[1:]))
 
             # Take final value function slice for bootstrapping.
             bootstrap_value = learner_outputs["baseline"][-1]
@@ -198,57 +204,75 @@ def learn(
             # Move from obs[t] -> action[t] to action[t] -> obs[t].
             # batch = {key: tensor[1:] for key, tensor in batch.items()}
             # learner_outputs = {key: tensor[:-1] for key, tensor in learner_outputs.items()}
-            batch = slice_buffers(batch, slice(1, None))
-            learner_outputs = slice_buffers(learner_outputs, slice(None, -1))
+            batch = buffers_apply(batch, lambda x: x[1:])
+            learner_outputs = buffers_apply(learner_outputs, lambda x: x[:-1])
 
-            behavior_policy_logits = flags.act_space.from_dict(batch["policy_logits"], expanded=True)
-            learner_policy_logits = flags.act_space.from_dict(learner_outputs["policy_logits"], expanded=True)
-            actions = flags.act_space.from_dict(batch["actions"], expanded=False)
+            losses = {
+                "pg": {},
+                "baseline": {},
+                "entropy": {}
+            }
             discounts = (~batch["done"]).float() * flags.discounting
-            discounts = discounts[..., None, None, None].expand_as(actions)
-            reward = batch["reward"][..., None, None].expand_as(actions)
-            values = learner_outputs["baseline"][..., None, None].expand_as(actions)
-            bootstrap_value = bootstrap_value[..., None, None].expand(*actions.size()[1:])
+            for act_space in batch["actions"].keys():
+                behavior_policy_logits = batch["policy_logits"][act_space]
+                learner_policy_logits = learner_outputs["policy_logits"][act_space]
+                actions = batch["actions"][act_space]
+                discounts_expanded = discounts[..., None, None, None, None].expand_as(actions)
+                reward = batch["reward"][..., None, :, None, None].expand_as(actions)
+                values = learner_outputs["baseline"][..., None, :, None, None].expand_as(actions)
+                bootstrap_value_expanded = bootstrap_value[:, None, :, None, None].expand(*actions.shape[1:])
 
-            vtrace_returns = vtrace.from_logits(
-                behavior_policy_logits=behavior_policy_logits,
-                target_policy_logits=learner_policy_logits,
-                actions=actions,
-                discounts=discounts,
-                rewards=reward,
-                values=values,
-                bootstrap_value=bootstrap_value,
-            )
-            actions_taken_mask = flags.act_space.from_dict(batch["actions_taken"], expanded=False)
+                vtrace_returns = vtrace.from_logits(
+                    behavior_policy_logits=behavior_policy_logits,
+                    target_policy_logits=learner_policy_logits,
+                    actions=actions,
+                    discounts=discounts_expanded,
+                    rewards=reward,
+                    values=values,
+                    bootstrap_value=bootstrap_value_expanded,
+                )
+                actions_taken_mask = batch["info"]["actions_taken"][act_space]
 
-            pg_loss = compute_policy_gradient_loss(
-                learner_policy_logits[actions_taken_mask],
-                actions[actions_taken_mask],
-                vtrace_returns.pg_advantages[actions_taken_mask],
-                reduction=flags.reduction
-            )
-            baseline_loss = flags.baseline_cost * compute_baseline_loss(
-                vtrace_returns.vs[actions_taken_mask] - values[actions_taken_mask],
-                reduction=flags.reduction
-            )
-            entropy_loss = flags.entropy_cost * compute_entropy_loss(
-                learner_policy_logits[actions_taken_mask],
-                reduction=flags.reduction
-            )
-            total_loss = pg_loss + baseline_loss + entropy_loss
+                losses["pg"][act_space] = compute_policy_gradient_loss(
+                    learner_policy_logits[actions_taken_mask],
+                    actions[actions_taken_mask],
+                    vtrace_returns.pg_advantages[actions_taken_mask],
+                    reduction=flags.reduction
+                )
+                losses["baseline"][act_space] = flags.baseline_cost * compute_baseline_loss(
+                    vtrace_returns.vs[actions_taken_mask] - values[actions_taken_mask],
+                    reduction=flags.reduction
+                )
+                losses["entropy"][act_space] = flags.entropy_cost * compute_entropy_loss(
+                    learner_policy_logits[actions_taken_mask],
+                    reduction=flags.reduction
+                )
+            total_loss = torch.stack([loss for d in losses.values() for loss in d.values()]).sum()
 
             last_lr = lr_scheduler.get_last_lr()
             assert len(last_lr) == 1, 'Logging per-parameter LR still needs support'
             last_lr = last_lr[0]
+            losses_by_loss_type = {
+                loss_type: torch.stack([v for v in val.values()]).sum().item()
+                for loss_type, val in losses.items()
+            }
+            losses_by_act_space = {
+                act_space: torch.stack([d[act_space] for d in losses.values()]).sum().item()
+                for act_space in batch["actions"].keys()
+            }
             stats = {
-                key[8:]: val[batch["done"]].mean.item() for key, val in batch["info"] if key.startswith("logging_")
+                key[8:]: val[batch["done"]].mean().item()
+                for key, val in batch["info"].items() if key.startswith("logging_")
             }
             stats.update({
                 "total_loss": total_loss.item(),
-                "pg_loss": pg_loss.item(),
-                "baseline_loss": baseline_loss.item(),
-                "entropy_loss": entropy_loss.item(),
                 "learning_rate": last_lr
+            })
+            stats.update({
+                f"total_{key}_loss": val for key, val in losses_by_loss_type.items()
+            })
+            stats.update({
+                f"total_{key}_loss": val for key, val in losses_by_act_space.items()
             })
 
             optimizer.zero_grad()
@@ -278,11 +302,12 @@ def train(flags):
     # Necessary for multithreading and multiprocessing
     os.environ["OMP_NUM_THREADS"] = "1"
     mp.set_start_method("spawn")
+    mp.set_sharing_strategy(flags.sharing_strategy)
 
     if flags.num_actors >= flags.num_buffers:
         raise ValueError("num_buffers should be larger than num_actors")
-    if flags.num_buffers < flags.batch_size:
-        raise ValueError("num_buffers should be larger than batch_size")
+    if flags.num_buffers < flags.batch_size // flags.n_actor_envs:
+        raise ValueError("num_buffers should be larger than batch_size // n_actor_envs")
 
     if not flags.disable_wandb:
         wandb.init(
@@ -310,6 +335,8 @@ def train(flags):
     full_queue = mp.SimpleQueue()
 
     for i in range(flags.num_actors):
+        # For debugging:
+        # actor = threading.Thread(
         actor = mp.Process(
             target=act,
             args=(
@@ -335,22 +362,13 @@ def train(flags):
     )
 
     def lr_lambda(epoch):
-        min_pct = flags.min_lr / flags.optimizer_kwargs.lr
+        min_pct = flags.min_lr / flags.optimizer_kwargs["lr"]
         pct_complete = min(epoch * t * b * n, flags.total_steps) / flags.total_steps
         scaled_pct_complete = pct_complete * (1. - min_pct) + min_pct
         return 1. - scaled_pct_complete
 
+    grad_scaler = amp.GradScaler()
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
-
-    logger = logging.getLogger("logfile")
-    stat_keys = [
-        "total_loss",
-        "mean_episode_return",
-        "pg_loss",
-        "baseline_loss",
-        "entropy_loss",
-    ]
-    logger.info("# Step\t%s", "\t".join(stat_keys))
 
     step, stats = 0, {}
 
@@ -360,7 +378,7 @@ def train(flags):
         timings = prof.Timings()
         while step < flags.total_steps:
             timings.reset()
-            batch, agent_state = get_batch(
+            batch = get_batch(
                 flags,
                 free_queue,
                 full_queue,
@@ -368,13 +386,13 @@ def train(flags):
                 timings,
             )
             stats = learn(
-                flags, actor_model, learner_model, batch, agent_state, optimizer, scheduler
+                flags, actor_model, learner_model, batch, optimizer, grad_scaler, scheduler
             )
             timings.time("learn")
             with lock:
                 step += t * b
                 if not flags.disable_wandb:
-                    wandb.log(stats, step=stats["step"])
+                    wandb.log(stats, step=step)
         if learner_idx == 0:
             logging.info("Batch and learn: %s", timings.summary())
 

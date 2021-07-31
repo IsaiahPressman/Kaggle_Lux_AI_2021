@@ -178,7 +178,8 @@ class ViTBlock(nn.Module):
             )
         )
 
-    def forward(self, x: torch.Tensor, input_mask: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, x: tuple[torch.Tensor, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
+        x, input_mask = x
         identity = x
         x = self.mhsa(self.norm1(x), input_mask)
         x = x + identity

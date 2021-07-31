@@ -1,3 +1,9 @@
+from contextlib import redirect_stdout
+import io
+# Silence "Loading environment football failed: No module named 'gfootball'" message
+with redirect_stdout(io.StringIO()):
+    import kaggle_environments
+
 import hydra
 import logging
 import os
@@ -25,7 +31,7 @@ def get_default_flags(flags: DictConfig) -> DictConfig:
     flags = OmegaConf.to_container(flags)
     # Env params
     flags.setdefault("seed", 42)
-    flags.setdefault("num_buffers", max(2 * flags["num_actors"], flags["batch_size"]))
+    flags.setdefault("num_buffers", max(2 * flags["num_actors"], flags["batch_size"] // flags["n_actor_envs"]))
 
     # Training params
     flags.setdefault("use_mixed_precision", True)
