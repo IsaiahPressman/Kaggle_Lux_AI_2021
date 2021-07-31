@@ -109,7 +109,7 @@ class LuxEnv(gym.Env):
         self.game_state._initialize(agent1res)
         self.game_state._update(agent1res[2:])
         self.done = False
-        self.board_dims = (self.game_state.map_height, self.game_state.map_width)
+        self.board_dims = (self.game_state.map_width, self.game_state.map_height)
         self.observation_space = self.obs_space.get_obs_spec(self.board_dims)
         self.info = {
             "actions_taken": {

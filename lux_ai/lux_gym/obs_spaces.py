@@ -17,7 +17,8 @@ MAX_RESOURCE = {
     Constants.RESOURCE_TYPES.URANIUM: 350.
 }
 
-MAX_FUEL = None
+# TODO: Fix max fuel amount
+MAX_FUEL = 1000.
 UNIT_ENCODING = {
     Constants.UNIT_TYPES.WORKER: 0,
     Constants.UNIT_TYPES.CART: 1,
@@ -80,7 +81,7 @@ class ObsSpace(Enum):
                 # Normalized from 0-6
                 "road_level": gym.spaces.Box(0., 1., shape=(1, 1, x, y)),
                 # Wood, coal, uranium
-                "resource_count": gym.spaces.Box(0., 1., shape=(3, 1, x, y)),
+                "resources": gym.spaces.Box(0., 1., shape=(3, 1, x, y)),
 
                 # Non-spatial observations
                 # Normalized from 0-200
@@ -105,7 +106,8 @@ class ObsSpace(Enum):
 
 
 class _FixedShapeContinuousObs(gym.ObservationWrapper):
-    def observation(self, observation: Game) -> dict[str, np.ndarray]:
+    def observation(self, observation):
+        observation, reward, done, info = observation
         w_capacity = GAME_CONSTANTS["PARAMETERS"]["RESOURCE_CAPACITY"]["WORKER"]
         ca_capacity = GAME_CONSTANTS["PARAMETERS"]["RESOURCE_CAPACITY"]["CART"]
         w_cooldown = GAME_CONSTANTS["PARAMETERS"]["UNIT_ACTION_COOLDOWN"]["WORKER"] * 2. - 1.
@@ -114,6 +116,10 @@ class _FixedShapeContinuousObs(gym.ObservationWrapper):
         ci_cooldown = GAME_CONSTANTS["PARAMETERS"]["CITY_ACTION_COOLDOWN"]
         max_road = GAME_CONSTANTS["PARAMETERS"]["MAX_ROAD"]
         max_research = max(GAME_CONSTANTS["PARAMETERS"]["RESEARCH_REQUIREMENTS"].values())
+
+        wood_idx = RESOURCE_ENCODING[Constants.RESOURCE_TYPES.WOOD]
+        coal_idx = RESOURCE_ENCODING[Constants.RESOURCE_TYPES.COAL]
+        uranium_idx = RESOURCE_ENCODING[Constants.RESOURCE_TYPES.URANIUM]
         obs = {
             key: np.zeros(spec.shape, dtype=np.float32) for key, spec in self.observation_space.spaces.items()
         }
@@ -124,20 +130,20 @@ class _FixedShapeContinuousObs(gym.ObservationWrapper):
                 x, y = unit.pos.x, unit.pos.y
                 if unit.is_worker():
                     obs["worker"][0, p_id, x, y] = 1.
-                    obs["worker_count"][0, p_id, x, y] += 1.
+                    obs["worker_COUNT"][0, p_id, x, y] += 1.
                     obs["worker_cooldown"][0, p_id, x, y] = unit.cooldown / w_cooldown
 
-                    obs["worker_cargo"][Constants.RESOURCE_TYPES.WOOD, p_id, x, y] = unit.cargo.wood / w_capacity
-                    obs["worker_cargo"][Constants.RESOURCE_TYPES.COAL, p_id, x, y] = unit.cargo.coal / w_capacity
-                    obs["worker_cargo"][Constants.RESOURCE_TYPES.URANIUM, p_id, x, y] = unit.cargo.uranium / w_capacity
+                    obs["worker_cargo"][wood_idx, p_id, x, y] = unit.cargo.wood / w_capacity
+                    obs["worker_cargo"][coal_idx, p_id, x, y] = unit.cargo.coal / w_capacity
+                    obs["worker_cargo"][uranium_idx, p_id, x, y] = unit.cargo.uranium / w_capacity
                 elif unit.is_cart():
                     obs["cart"][0, p_id, x, y] = 1.
-                    obs["cart_count"][0, p_id, x, y] += 1.
+                    obs["cart_COUNT"][0, p_id, x, y] += 1.
                     obs["cart_cooldown"][0, p_id, x, y] = unit.cooldown / ca_cooldown
 
-                    obs["cart_cargo"][Constants.RESOURCE_TYPES.WOOD, p_id, x, y] = unit.cargo.wood / ca_capacity
-                    obs["cart_cargo"][Constants.RESOURCE_TYPES.COAL, p_id, x, y] = unit.cargo.coal / ca_capacity
-                    obs["cart_cargo"][Constants.RESOURCE_TYPES.URANIUM, p_id, x, y] = unit.cargo.uranium / ca_capacity
+                    obs["cart_cargo"][wood_idx, p_id, x, y] = unit.cargo.wood / ca_capacity
+                    obs["cart_cargo"][coal_idx, p_id, x, y] = unit.cargo.coal / ca_capacity
+                    obs["cart_cargo"][uranium_idx, p_id, x, y] = unit.cargo.uranium / ca_capacity
                 else:
                     raise NotImplementedError(f'New unit type: {unit}')
 
@@ -157,14 +163,14 @@ class _FixedShapeContinuousObs(gym.ObservationWrapper):
                 x, y = cell.pos.x, cell.pos.y
                 obs["road_level"][0, 0, x, y] = cell.road / max_road
                 if cell.has_resource():
-                    obs["resource_count"][RESOURCE_ENCODING[cell.resource.type], 0, x, y] = \
+                    obs["resources"][RESOURCE_ENCODING[cell.resource.type], 0, x, y] = \
                         cell.resource.amount / MAX_RESOURCE[cell.resource.type]
 
             obs["research_points"][0, p_id] = player.research_points / max_research
             obs["researched_coal"][0, p_id] = player.researched_coal()
-            obs["researched_uranium"][1, p_id] = player.researched_uranium()
+            obs["researched_uranium"][0, p_id] = player.researched_uranium()
         dn_cycle_len = GAME_CONSTANTS["PARAMETERS"]["DAY_LENGTH"] + GAME_CONSTANTS["PARAMETERS"]["NIGHT_LENGTH"]
         obs["night"][0, 0] = (observation.turn - 1) % dn_cycle_len >= GAME_CONSTANTS["PARAMETERS"]["DAY_LENGTH"]
         obs["turn"][0, 0] = observation.turn / GAME_CONSTANTS["PARAMETERS"]["MAX_DAYS"]
 
-        return obs
+        return obs, reward, done, info

@@ -101,7 +101,7 @@ def act(
 
         env = create_env(flags, device=flags.actor_device)
         if flags.seed is not None:
-            env.seed(flags.seed + actor_index)
+            env.seed(flags.seed + actor_index * flags.n_actor_envs)
         else:
             env.seed()
         env_output = env.reset(force=True)
@@ -284,18 +284,19 @@ def train(flags):
     if flags.num_buffers < flags.batch_size:
         raise ValueError("num_buffers should be larger than batch_size")
 
-    wandb.init(
-        project=flags.project,
-        config=vars(flags),
-        group=flags.group,
-        entity=flags.entity,
-    )
+    if not flags.disable_wandb:
+        wandb.init(
+            project=flags.project,
+            config=vars(flags),
+            group=flags.group,
+            entity=flags.entity,
+        )
 
     t = flags.unroll_length
     b = flags.batch_size
     n = flags.n_actor_envs
 
-    _, _, _, example_info = create_env(flags, torch.device("cpu")).reset(force=True)
+    example_info = create_env(flags, torch.device("cpu")).reset(force=True)["info"]
     buffers = create_buffers(flags, example_info)
 
     if flags.load_dir:
@@ -325,7 +326,8 @@ def train(flags):
 
     learner_model = create_model(flags, flags.learner_device)
     learner_model = learner_model.share_memory()
-    wandb.watch(learner_model, log="all", log_graph=True)
+    if not flags.disable_wandb:
+        wandb.watch(learner_model, log="all", log_graph=True)
 
     optimizer = flags.optimizer_class(
         learner_model.parameters(),
@@ -371,7 +373,8 @@ def train(flags):
             timings.time("learn")
             with lock:
                 step += t * b
-                wandb.log(stats, step=stats["step"])
+                if not flags.disable_wandb:
+                    wandb.log(stats, step=stats["step"])
         if learner_idx == 0:
             logging.info("Batch and learn: %s", timings.summary())
 
