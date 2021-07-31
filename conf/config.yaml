@@ -1,0 +1,46 @@
+defaults:
+- override hydra/job_logging: colorlog
+- override hydra/hydra_logging: colorlog
+
+name: null
+
+## WANDB params
+# The wandb project name
+project: Lux_AI_2021
+# The wandb user to log to
+entity: isaiahpressman
+# The wandb group for the run
+group: group1
+
+## ENV params
+act_space: BasicActionSpace
+obs_space: FIXED_SHAPE_CONTINUOUS_OBS
+
+## TRAINING params
+total_steps: 1e9
+num_actors: 16
+n_actor_envs: 16
+unroll_length: 40
+batch_size: 32
+discounting: 0.99
+
+## MODEL params
+model_arch: dummy_conv_model
+dim: 128
+use_index_select: True
+
+## OPTIMIZER params
+optimizer_class: RMSprop
+min_lr: 0.00001
+optimizer_kwargs:
+  lr: 0.001
+  alpha: 0.9
+
+## LOSS params
+entropy_cost: 0.0001
+baseline_cost: 0.5
+
+# MISCELLANEOUS params
+# load_dir: null
+actor_device: cuda:1
+learner_device: cuda:0

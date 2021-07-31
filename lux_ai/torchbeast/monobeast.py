@@ -21,6 +21,7 @@ import threading
 import time
 import timeit
 import traceback
+from types import SimpleNamespace
 from typing import *
 import wandb
 import warnings
@@ -87,7 +88,7 @@ def compute_policy_gradient_loss(
 
 
 def act(
-    flags,
+    flags: SimpleNamespace,
     actor_index: int,
     free_queue: mp.SimpleQueue,
     full_queue: mp.SimpleQueue,
@@ -155,7 +156,7 @@ def act(
 
 
 def get_batch(
-    flags,
+    flags: SimpleNamespace,
     free_queue: mp.SimpleQueue,
     full_queue: mp.SimpleQueue,
     buffers: Buffers,
@@ -171,17 +172,17 @@ def get_batch(
     for m in indices:
         free_queue.put(m)
     timings.time("enqueue")
-    batch = {k: t.to(device=flags.device, non_blocking=True) for k, t in batch.items()}
+    batch = {k: t.to(device=flags.learner_device, non_blocking=True) for k, t in batch.items()}
     timings.time("device")
     return batch
 
 
 def learn(
-    flags,
+    flags: SimpleNamespace,
     actor_model: nn.Module,
     learner_model: nn.Module,
     batch: dict[str, torch.Tensor],
-    optimizer: torch.optim.optimizer.Optimizer,
+    optimizer: torch.optim.Optimizer,
     grad_scaler: amp.grad_scaler,
     lr_scheduler: torch.optim.lr_scheduler,
     lock=threading.Lock(),
@@ -278,12 +279,17 @@ def train(flags):
     os.environ["OMP_NUM_THREADS"] = "1"
     mp.set_start_method("spawn")
 
-    if flags.num_buffers is None:  # Set sensible default for num_buffers.
-        flags.num_buffers = max(2 * flags.num_actors, flags.batch_size)
     if flags.num_actors >= flags.num_buffers:
         raise ValueError("num_buffers should be larger than num_actors")
     if flags.num_buffers < flags.batch_size:
         raise ValueError("num_buffers should be larger than batch_size")
+
+    wandb.init(
+        project=flags.project,
+        config=vars(flags),
+        group=flags.group,
+        entity=flags.entity,
+    )
 
     t = flags.unroll_length
     b = flags.batch_size
@@ -292,7 +298,7 @@ def train(flags):
     _, _, _, example_info = create_env(flags, torch.device("cpu")).reset(force=True)
     buffers = create_buffers(flags, example_info)
 
-    if flags.resume_from_checkpoint is not None:
+    if flags.load_dir:
         raise NotImplementedError
 
     actor_model = create_model(flags, flags.actor_device)
@@ -319,6 +325,7 @@ def train(flags):
 
     learner_model = create_model(flags, flags.learner_device)
     learner_model = learner_model.share_memory()
+    wandb.watch(learner_model, log="all", log_graph=True)
 
     optimizer = flags.optimizer_class(
         learner_model.parameters(),
@@ -326,7 +333,7 @@ def train(flags):
     )
 
     def lr_lambda(epoch):
-        min_pct = flags.min_lr / flags.lr
+        min_pct = flags.min_lr / flags.optimizer_kwargs.lr
         pct_complete = min(epoch * t * b * n, flags.total_steps) / flags.total_steps
         scaled_pct_complete = pct_complete * (1. - min_pct) + min_pct
         return 1. - scaled_pct_complete
@@ -401,7 +408,7 @@ def train(flags):
 
             # Save every checkpoint_freq minutes
             if timer() - last_checkpoint_time > flags.checkpoint_freq * 60:
-                cp_path = Path(flags.exp_folder) / str(step).zfill(int(math.log10(flags.total_steps)) + 1)
+                cp_path = str(step).zfill(int(math.log10(flags.total_steps)) + 1) + ".pt"
                 checkpoint(cp_path)
                 last_checkpoint_time = timer()
 
@@ -419,12 +426,12 @@ def train(flags):
             free_queue.put(None)
         for actor in actor_processes:
             actor.join(timeout=1)
-        cp_path = Path(flags.exp_folder) / str(step).zfill(int(math.log10(flags.total_steps)) + 1)
+        cp_path = str(step).zfill(int(math.log10(flags.total_steps)) + 1) + ".pt"
         checkpoint(cp_path)
 
 
 """
-def test(flags, num_episodes: int = 10):
+def test(flags: SimpleNamespace, num_episodes: int = 10):
     if flags.xpid is None:
         checkpointpath = "./latest/model.tar"
     else:

@@ -13,7 +13,7 @@ class PadEnv(gym.Wrapper):
         self.max_board_size = max_board_size
         self.observation_space = self.unwrapped.obs_space.get_obs_spec(max_board_size)
         self.input_mask = np.zeros((1,) + max_board_size, dtype=bool)
-        self.input_mask[:, self.orig_board_dims[0], :self.orig_board_dims[1]] = 1
+        self.input_mask[:, :self.orig_board_dims[0], :self.orig_board_dims[1]] = 1
 
     def _pad(self, arr: np.ndarray) -> np.ndarray:
         return np.pad(arr, pad_width=self.pad_width, constant_values=0.)
@@ -93,7 +93,7 @@ class LoggingEnv(gym.Wrapper):
         return obs, reward, done, self.info(info)
 
 
-class VecEnv:
+class VecEnv(gym.Env):
     def __init__(self, envs: list[gym.Env]):
         self.envs = envs
         self.last_outs = [() for _ in range(len(self.envs))]

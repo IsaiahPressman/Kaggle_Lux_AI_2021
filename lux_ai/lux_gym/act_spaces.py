@@ -48,7 +48,7 @@ for u in ["worker", "cart"]:
 ACTION_MEANINGS["worker"].extend(["PILLAGE", "BUILD_CITY"])
 ACTION_MEANINGS_TO_IDX = {
     actor: {
-        action: idx for action, idx in enumerate(actions)
+        action: idx for idx, action in enumerate(actions)
     } for actor, actions in ACTION_MEANINGS.items()
 }
 

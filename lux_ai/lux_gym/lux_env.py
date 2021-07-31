@@ -18,7 +18,7 @@ from ..lux.game_objects import Unit, CityTile
 from ..lux_gym.obs_spaces import ObsSpace, MAX_BOARD_SIZE
 from ..lux_gym.act_spaces import BasicActionSpace, ACTION_MEANINGS, ACTION_MEANINGS_TO_IDX, DIRECTIONS, RESOURCES
 
-DIR_PATH = Path(__file__).parent
+DIR_PATH = Path(__file__).parent.parent
 
 
 def _cleanup_dimensions_factory(dimension_process: Popen) -> NoReturn:
@@ -194,15 +194,16 @@ class LuxEnv(gym.Env):
                     # Workers: Pillaging is only a legal action when on a road tile
                     # Workers: Building a city is only a legal action when the worker has the required resources
                     for d in DIRECTIONS:
-                        new_pos = unit.pos.translate(d, 1)
+                        new_pos_tuple = unit.pos.translate(d, 1)
+                        new_pos_tuple = new_pos_tuple.x, new_pos_tuple.y
                         # Moving and transferring - check that the target position exists on the board
-                        if new_pos not in self.pos_to_unit_dict.keys():
+                        if new_pos_tuple not in self.pos_to_unit_dict.keys():
                             self.info["available_actions_mask"][unit_type][
                                 :,
                                 p_id,
                                 x,
                                 y,
-                                ACTION_MEANINGS_TO_IDX[f"MOVE_{d}"]
+                                ACTION_MEANINGS_TO_IDX[unit_type][f"MOVE_{d}"]
                             ] = False
                             for r in RESOURCES:
                                 self.info["available_actions_mask"][unit_type][
@@ -210,36 +211,38 @@ class LuxEnv(gym.Env):
                                     p_id,
                                     x,
                                     y,
-                                    ACTION_MEANINGS_TO_IDX[f"TRANSFER_{r}_{d}"]
+                                    ACTION_MEANINGS_TO_IDX[unit_type][f"TRANSFER_{r}_{d}"]
                                 ] = False
                             continue
                         # Moving - check that the target position does not contain an opposing city tile
-                        if self.pos_to_city_tile_dict[new_pos].team != p_id:
+                        new_pos_city_tile = self.pos_to_city_tile_dict[new_pos_tuple]
+                        if new_pos_city_tile and new_pos_city_tile.team != p_id:
                             self.info["available_actions_mask"][unit_type][
                                 :,
                                 p_id,
                                 x,
                                 y,
-                                ACTION_MEANINGS_TO_IDX[f"MOVE_{d}"]
+                                ACTION_MEANINGS_TO_IDX[unit_type][f"MOVE_{d}"]
                             ] = False
                         # Moving - check that the target position does not contain a unit with cooldown > 0
-                        if self.pos_to_unit_dict[new_pos].cooldown > 0:
+                        new_pos_unit = self.pos_to_unit_dict[new_pos_tuple]
+                        if new_pos_unit and new_pos_unit.cooldown > 0:
                             self.info["available_actions_mask"][unit_type][
                                 :,
                                 p_id,
                                 x,
                                 y,
-                                ACTION_MEANINGS_TO_IDX[f"MOVE_{d}"]
+                                ACTION_MEANINGS_TO_IDX[unit_type][f"MOVE_{d}"]
                             ] = False
                         # Transferring - check that there is an allied unit in the target square
-                        if self.pos_to_unit_dict[new_pos] is None or self.pos_to_unit_dict[new_pos].team != p_id:
+                        if new_pos_unit is None or new_pos_unit.team != p_id:
                             for r in RESOURCES:
                                 self.info["available_actions_mask"][unit_type][
                                     :,
                                     p_id,
                                     x,
                                     y,
-                                    ACTION_MEANINGS_TO_IDX[f"TRANSFER_{r}_{d}"]
+                                    ACTION_MEANINGS_TO_IDX[unit_type][f"TRANSFER_{r}_{d}"]
                                 ] = False
                     if unit.is_worker():
                         # Pillaging - check that worker is on a road tile
@@ -249,7 +252,7 @@ class LuxEnv(gym.Env):
                                 p_id,
                                 x,
                                 y,
-                                ACTION_MEANINGS_TO_IDX["PILLAGE"]
+                                ACTION_MEANINGS_TO_IDX[unit_type]["PILLAGE"]
                             ] = False
                         # Building a city - check that worker has >= the required wood
                         if unit.cargo.wood < GAME_CONSTANTS["PARAMETERS"]["CITY_WOOD_COST"]:
@@ -258,7 +261,7 @@ class LuxEnv(gym.Env):
                                 p_id,
                                 x,
                                 y,
-                                ACTION_MEANINGS_TO_IDX["BUILD_CITY"]
+                                ACTION_MEANINGS_TO_IDX[unit_type]["BUILD_CITY"]
                             ] = False
             for city in player.cities.values():
                 for city_tile in city.citytiles:
