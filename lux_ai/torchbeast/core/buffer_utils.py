@@ -1,3 +1,4 @@
+import gym
 import numpy as np
 import torch
 from typing import *
@@ -16,22 +17,12 @@ def fill_buffers_inplace(buffers: Union[dict, torch.Tensor], fill_vals: Union[di
 
 def stack_buffers(buffers: Buffers) -> dict[str, Union[dict, torch.Tensor]]:
     stacked_buffers = {}
-    for key, val in buffers[0].keys():
+    for key, val in buffers[0].items():
         if isinstance(val, dict):
             stacked_buffers[key] = stack_buffers([b[key] for b in buffers])
         else:
             stacked_buffers[key] = torch.cat([b[key] for b in buffers], dim=1)
     return stacked_buffers
-
-
-def slice_buffers(buffers: Union[dict, torch.Tensor], s: slice) -> Union[dict, torch.Tensor]:
-    if isinstance(buffers, dict):
-        sliced_buffers = {}
-        for key, val in buffers.items():
-            sliced_buffers[key] = slice_buffers(val, s)
-        return sliced_buffers
-    else:
-        return buffers[s]
 
 
 def _create_buffers_from_specs(specs: dict[str, Union[dict, tuple, torch.dtype]]) -> Union[dict, torch.Tensor]:
@@ -44,13 +35,14 @@ def _create_buffers_from_specs(specs: dict[str, Union[dict, tuple, torch.dtype]]
         return torch.empty(**specs).share_memory_()
 
 
-def _create_buffers_like(buffers: Union[dict, torch.Tensor]) -> Union[dict, torch.Tensor]:
+def _create_buffers_like(buffers: Union[dict, torch.Tensor], t_dim: int) -> Union[dict, torch.Tensor]:
     if isinstance(buffers, dict):
         torch_buffers = {}
         for key, val in buffers.items():
-            torch_buffers[key] = _create_buffers_like(val)
+            torch_buffers[key] = _create_buffers_like(val, t_dim)
         return torch_buffers
     else:
+        buffers = buffers.unsqueeze(0).expand(t_dim, *[-1 for _ in range(len(buffers.shape))])
         return torch.empty_like(buffers).share_memory_()
 
 
@@ -58,11 +50,20 @@ def create_buffers(flags, example_info: dict[str, Union[dict, np.ndarray, torch.
     t = flags.unroll_length
     n = flags.n_actor_envs
     p = 2
+    obs_specs = {}
+    for key, spec in flags.obs_space.get_obs_spec().spaces.items():
+        if isinstance(spec, gym.spaces.MultiBinary):
+            dtype = torch.int64
+        elif isinstance(spec, gym.spaces.MultiDiscrete):
+            dtype = torch.int64
+        elif isinstance(spec, gym.spaces.Box):
+            dtype = torch.float32
+        else:
+            raise NotImplementedError(f"{type(spec)} is not an accepted observation space.")
+        obs_specs[key] = dict(size=(t + 1, n, *spec.shape), dtype=dtype)
+
     specs = dict(
-        observation={
-            key: dict(size=(t + 1, n, *val.shape), dtype=torch.float32)
-            for key, val in flags.obs_space.get_obs_spec().spaces.items()
-        },
+        obs=obs_specs,
         reward=dict(size=(t + 1, n, p), dtype=torch.float32),
         done=dict(size=(t + 1, n), dtype=torch.bool),
         policy_logits={
@@ -70,7 +71,7 @@ def create_buffers(flags, example_info: dict[str, Union[dict, np.ndarray, torch.
             for key, val in flags.act_space.get_action_space_expanded_shape().items()
         },
         baseline=dict(size=(t + 1, n, p), dtype=torch.float32),
-        action={
+        actions={
             key: dict(size=(t + 1, n, *val.shape), dtype=torch.int64)
             for key, val in flags.act_space.get_action_space().spaces.items()
         },
@@ -78,6 +79,15 @@ def create_buffers(flags, example_info: dict[str, Union[dict, np.ndarray, torch.
     buffers: Buffers = []
     for _ in range(flags.num_buffers):
         new_buffer = _create_buffers_from_specs(specs)
-        new_buffer["info"] = _create_buffers_like(example_info)
+        new_buffer["info"] = _create_buffers_like(example_info, t + 1)
         buffers.append(new_buffer)
     return buffers
+
+
+def buffers_apply(buffers: Union[dict, torch.Tensor], func: Callable[[torch.Tensor], Any]) -> Union[dict, torch.Tensor]:
+    if isinstance(buffers, dict):
+        return {
+            key: buffers_apply(val, func) for key, val in buffers.items()
+        }
+    else:
+        return func(buffers)

@@ -130,7 +130,11 @@ ACTION_MEANING_TO_FUNC = {
 for u in ["worker", "cart"]:
     for d in DIRECTIONS:
         a = f"MOVE_{d}"
-        ACTION_MEANING_TO_FUNC[a] = _move_factory(a)
+        ACTION_MEANING_TO_FUNC[u][a] = _move_factory(a)
+    for r in RESOURCES:
+        for d in DIRECTIONS:
+            actions_str = f"TRANSFER_{r}_{d}"
+            ACTION_MEANING_TO_FUNC[u][actions_str] = _transfer_factory(actions_str)
 
 
 class BaseActSpace(ABC):

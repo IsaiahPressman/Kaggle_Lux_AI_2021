@@ -17,11 +17,11 @@ act_space: BasicActionSpace
 obs_space: FIXED_SHAPE_CONTINUOUS_OBS
 
 ## TRAINING params
-total_steps: 1e9
-num_actors: 16
+total_steps: 1e8
+num_actors: 4
 n_actor_envs: 16
 unroll_length: 20
-batch_size: 2
+batch_size: 16
 discounting: 0.99
 
 ## MODEL params
@@ -33,7 +33,7 @@ use_index_select: True
 optimizer_class: RMSprop
 min_lr: 0.00001
 optimizer_kwargs:
-  lr: 0.001
+  lr: 0.0005
   alpha: 0.9
 
 ## LOSS params
@@ -44,4 +44,6 @@ baseline_cost: 0.5
 # load_dir: null
 actor_device: cuda:1
 learner_device: cuda:0
-disable_wandb: True
+disable_wandb: False
+# file_descriptor or file_system
+sharing_strategy: file_descriptor

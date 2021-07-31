@@ -5,6 +5,8 @@ from torch import nn
 import torch.nn.functional as F
 from typing import *
 
+from .in_blocks import DictInputLayer
+
 
 class DictActor(nn.Module):
     def __init__(
@@ -49,11 +51,10 @@ class DictActor(nn.Module):
             action_plane_shape = self.action_plane_shapes[key]
             logits = actor(x).view(b, n_actions, *action_plane_shape, h, w)
             # Move the logits dimension to the end
-            actions = DictActor.logits_to_actions(logits.permute(0, 2, 3, 4, 5, 1).view(-1, n_actions), sample)
+            logits = logits.permute(0, 2, 3, 4, 5, 1).contiguous()
+            actions = DictActor.logits_to_actions(logits.view(-1, n_actions), sample)
             policy_logits_out[key] = logits
-            actions_out[key] = actions
-        # TODO: Reshape out to shape (batch, player, n_actions, x, y)
-        # TODO: Alternately just (batch, *action_plane_shape, x, y)?
+            actions_out[key] = actions.view(b, *action_plane_shape, h, w)
         return policy_logits_out, actions_out
 
     @staticmethod
@@ -85,6 +86,7 @@ class BasicActorCriticNetwork(nn.Module):
             final_value_activation: nn.Module = ValueActivation(dim=-1),
     ):
         super(BasicActorCriticNetwork, self).__init__()
+        self.dict_input_layer = DictInputLayer()
         self.base_model = base_model
         self.base_out_channels = base_out_channels
 
@@ -96,22 +98,23 @@ class BasicActorCriticNetwork(nn.Module):
             baseline_layers.append(nn.Conv2d(self.base_out_channels, self.base_out_channels, (1, 1)))
             baseline_layers.append(actor_critic_activation())
 
-        actor_layers.append(DictActor(self.base_out_channels, action_space))
-        self.actor = nn.Sequential(*actor_layers)
+        self.actor_base = nn.Sequential(*actor_layers)
+        self.actor = DictActor(self.base_out_channels, action_space)
 
         baseline_layers.append(nn.AdaptiveAvgPool2d(1))
+        baseline_layers.append(nn.Flatten())
         baseline_layers.append(nn.Linear(self.base_out_channels, 2))
         baseline_layers.append(final_value_activation)
         self.baseline = nn.Sequential(*baseline_layers)
 
     def forward(
             self,
-            x: Union[torch.Tensor, dict[str, torch.Tensor]],
-            input_mask: torch.Tensor,
+            x: dict[str, Union[dict, torch.Tensor]],
             sample: bool = True
     ) -> dict[str, Any]:
-        base_out, _ = self.base(x, input_mask)
-        policy_logits, actions = self.actor(base_out, sample)
+        x, input_mask = self.dict_input_layer(x)
+        base_out, _ = self.base_model((x, input_mask))
+        policy_logits, actions = self.actor(self.actor_base(base_out), sample)
         baseline = self.baseline(base_out)
         return dict(
             actions=actions,

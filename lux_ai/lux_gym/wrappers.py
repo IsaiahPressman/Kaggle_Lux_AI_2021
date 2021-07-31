@@ -18,8 +18,10 @@ class PadEnv(gym.Wrapper):
     def _pad(self, x: Union[dict, np.ndarray]) -> Union[dict, np.ndarray]:
         if isinstance(x, dict):
             return {key: self._pad(val) for key, val in x.items()}
-        elif x.ndim == 4 and x.shape[-2:] == self.orig_board_dims:
-            return np.pad(x, pad_width=self.pad_width, constant_values=0.)
+        elif x.ndim == 4 and x.shape[2:4] == self.orig_board_dims:
+            return np.pad(x, pad_width=self.base_pad_width, constant_values=0.)
+        elif x.ndim == 5 and x.shape[2:4] == self.orig_board_dims:
+            return np.pad(x, pad_width=self.base_pad_width + ((0, 0),), constant_values=0.)
         else:
             return x
 
@@ -39,7 +41,7 @@ class PadEnv(gym.Wrapper):
     def reset(self, **kwargs):
         obs, reward, done, info = super(PadEnv, self).reset(**kwargs)
         self.input_mask[:] = 0
-        self.input_mask[:, self.orig_board_dims[0], :self.orig_board_dims[1]] = 1
+        self.input_mask[:, :self.orig_board_dims[0], :self.orig_board_dims[1]] = 1
         return self.observation(obs), reward, done, self.info(info)
 
     def step(self, action: dict[str, np.ndarray]):
@@ -54,7 +56,7 @@ class PadEnv(gym.Wrapper):
         return self.unwrapped.board_dims
 
     @property
-    def pad_width(self):
+    def base_pad_width(self):
         return (
             (0, 0),
             (0, 0),
@@ -83,7 +85,7 @@ class LoggingEnv(gym.Wrapper):
         }
         self.peak_city_tile_count = np.maximum(self.peak_city_tile_count, logs["city_tiles"])
         logs["peak_city_tiles"] = self.peak_city_tile_count.copy()
-        info.update({f"logging_{key}": np.array(val) for key, val in logs.items()})
+        info.update({f"logging_{key}": np.array(val, dtype=np.float32) for key, val in logs.items()})
         return info
 
     def reset(self, **kwargs):
@@ -170,17 +172,15 @@ class PytorchEnv(gym.Wrapper):
         self.device = device
         
     def reset(self, **kwargs):
-        obs, reward, done, info = super(PytorchEnv, self).reset(**kwargs)
-        return self._to_tensor(obs), reward, done, self._to_tensor(info)
+        return tuple([self._to_tensor(out) for out in super(PytorchEnv, self).reset(**kwargs)])
         
     def step(self, action: dict[str, torch.Tensor]):
         action = {
             key: val.cpu().numpy() for key, val in action.items()
         }
-        obs, reward, done, info = super(PytorchEnv, self).step(action)
-        return self._to_tensor(obs), reward, done, self._to_tensor(info)
+        return tuple([self._to_tensor(out) for out in super(PytorchEnv, self).step(action)])
 
-    def _to_tensor(self, x: dict[str, Union[dict, np.ndarray]]) -> dict[str, Union[dict, torch.Tensor]]:
+    def _to_tensor(self, x: Union[dict, np.ndarray]) -> dict[str, Union[dict, torch.Tensor]]:
         if isinstance(x, dict):
             return {key: self._to_tensor(val) for key, val in x.items()}
         else:

@@ -98,16 +98,36 @@ class ObsSpace(Enum):
         else:
             raise NotImplementedError(f'ObsSpace not yet implemented: {self.name}')
 
-    def wrap_env(self, env) -> gym.ObservationWrapper:
+    def wrap_env(self, env) -> gym.Wrapper:
         if self == ObsSpace.FIXED_SHAPE_CONTINUOUS_OBS:
             return _FixedShapeContinuousObs(env)
         else:
             raise NotImplementedError(f'ObsSpace not yet implemented: {self.name}')
 
 
-class _FixedShapeContinuousObs(gym.ObservationWrapper):
+class _FixedShapeContinuousObs(gym.Wrapper):
+    def __init__(self, env: gym.Env):
+        super(_FixedShapeContinuousObs, self).__init__(env)
+        self._empty_obs = {}
+        for key, spec in self.observation_space.spaces.items():
+            if isinstance(spec, gym.spaces.MultiBinary):
+                self._empty_obs[key] = np.zeros(spec.shape, dtype=np.int64)
+            elif isinstance(spec, gym.spaces.MultiDiscrete):
+                self._empty_obs[key] = np.zeros(spec.shape, dtype=np.int64)
+            elif isinstance(spec, gym.spaces.Box):
+                self._empty_obs[key] = np.zeros(spec.shape, dtype=np.float32)
+            else:
+                raise NotImplementedError(f"{type(spec)} is not an accepted observation space.")
+
+    def reset(self, **kwargs):
+        observation, reward, done, info = self.env.reset(**kwargs)
+        return self.observation(observation), reward, done, info
+
+    def step(self, action):
+        observation, reward, done, info = self.env.step(action)
+        return self.observation(observation), reward, done, info
+
     def observation(self, observation):
-        observation, reward, done, info = observation
         w_capacity = GAME_CONSTANTS["PARAMETERS"]["RESOURCE_CAPACITY"]["WORKER"]
         ca_capacity = GAME_CONSTANTS["PARAMETERS"]["RESOURCE_CAPACITY"]["CART"]
         w_cooldown = GAME_CONSTANTS["PARAMETERS"]["UNIT_ACTION_COOLDOWN"]["WORKER"] * 2. - 1.
@@ -121,7 +141,7 @@ class _FixedShapeContinuousObs(gym.ObservationWrapper):
         coal_idx = RESOURCE_ENCODING[Constants.RESOURCE_TYPES.COAL]
         uranium_idx = RESOURCE_ENCODING[Constants.RESOURCE_TYPES.URANIUM]
         obs = {
-            key: np.zeros(spec.shape, dtype=np.float32) for key, spec in self.observation_space.spaces.items()
+            key: val.copy() for key, val in self._empty_obs.items()
         }
 
         for player in observation.players:
@@ -173,4 +193,4 @@ class _FixedShapeContinuousObs(gym.ObservationWrapper):
         obs["night"][0, 0] = (observation.turn - 1) % dn_cycle_len >= GAME_CONSTANTS["PARAMETERS"]["DAY_LENGTH"]
         obs["turn"][0, 0] = observation.turn / GAME_CONSTANTS["PARAMETERS"]["MAX_DAYS"]
 
-        return obs, reward, done, info
+        return obs
