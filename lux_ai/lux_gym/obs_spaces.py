@@ -115,7 +115,7 @@ class _FixedShapeContinuousObs(gym.ObservationWrapper):
         max_road = GAME_CONSTANTS["PARAMETERS"]["MAX_ROAD"]
         max_research = max(GAME_CONSTANTS["PARAMETERS"]["RESEARCH_REQUIREMENTS"].values())
         obs = {
-            key: np.zeros(spec.shape, dtype=np.float32) for spec, key in self.observation_space
+            key: np.zeros(spec.shape, dtype=np.float32) for key, spec in self.observation_space.spaces.items()
         }
 
         for player in observation.players:
@@ -168,7 +168,3 @@ class _FixedShapeContinuousObs(gym.ObservationWrapper):
         obs["turn"][0, 0] = observation.turn / GAME_CONSTANTS["PARAMETERS"]["MAX_DAYS"]
 
         return obs
-
-    @property
-    def observation_space(self):
-        return self.unwrapped.observation_space
