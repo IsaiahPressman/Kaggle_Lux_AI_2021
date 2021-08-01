@@ -261,18 +261,27 @@ def learn(
                 for act_space in batch["actions"].keys()
             }
             stats = {
-                key[8:]: val[batch["done"]].mean().item()
-                for key, val in batch["info"].items() if key.startswith("logging_")
+                "Env": {
+                    key[8:]: val[batch["done"]].mean().item()
+                    for key, val in batch["info"].items() if key.startswith("logging_")
+                },
+                "Loss": {
+                    "total_loss": total_loss.item(),
+                },
+                "Misc": {
+                    "learning_rate": last_lr,
+                },
             }
-            stats.update({
-                "total_loss": total_loss.item(),
-                "learning_rate": last_lr
-            })
-            stats.update({
+            stats["Loss"].update({
                 f"total_{key}_loss": val for key, val in losses_by_loss_type.items()
             })
-            stats.update({
+            stats["Loss"].update({
                 f"total_{key}_loss": val for key, val in losses_by_act_space.items()
+            })
+            stats["Loss"].update({
+                f"{act_space}_{loss_type}_loss": val.item()
+                for loss_type, d in losses.items()
+                for act_space, val in d.items()
             })
 
             optimizer.zero_grad()
@@ -309,14 +318,6 @@ def train(flags):
     if flags.num_buffers < flags.batch_size // flags.n_actor_envs:
         raise ValueError("num_buffers should be larger than batch_size // n_actor_envs")
 
-    if not flags.disable_wandb:
-        wandb.init(
-            project=flags.project,
-            config=vars(flags),
-            group=flags.group,
-            entity=flags.entity,
-        )
-
     t = flags.unroll_length
     b = flags.batch_size
     n = flags.n_actor_envs
@@ -328,6 +329,7 @@ def train(flags):
         raise NotImplementedError
 
     actor_model = create_model(flags, flags.actor_device)
+    actor_model.eval()
     actor_model.share_memory()
 
     actor_processes = []
@@ -350,11 +352,13 @@ def train(flags):
         )
         actor.start()
         actor_processes.append(actor)
+        time.sleep(0.5)
 
     learner_model = create_model(flags, flags.learner_device)
+    learner_model.train()
     learner_model = learner_model.share_memory()
     if not flags.disable_wandb:
-        wandb.watch(learner_model, log="all", log_graph=True)
+        wandb.watch(learner_model, flags.model_log_freq, log="all", log_graph=True)
 
     optimizer = flags.optimizer_class(
         learner_model.parameters(),
@@ -434,7 +438,8 @@ def train(flags):
                 last_checkpoint_time = timer()
 
             sps = (step - start_step) / (timer() - start_time)
-            logging.info(f"Steps {step:d} @ {sps:.1f} SPS. Stats:\n{pprint.pformat(stats)}")
+            bps = (step - start_step) / flags.batch_size / (timer() - start_time)
+            logging.info(f"Steps {step:d} @ {sps:.1f} SPS / {bps:.1f} BPS. Stats:\n{pprint.pformat(stats)}")
     except KeyboardInterrupt:
         # Try checkpointing and joining actors then quit.
         return

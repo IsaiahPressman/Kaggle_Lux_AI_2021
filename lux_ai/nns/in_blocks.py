@@ -24,8 +24,10 @@ def _get_select_func(use_index_select: bool) -> Callable:
 
 class DictInputLayer(nn.Module):
     @staticmethod
-    def forward(x: dict[str, Union[dict, torch.Tensor]]) -> tuple[dict[str, torch.Tensor], torch.Tensor]:
-        return x["obs"], x["info"]["input_mask"]
+    def forward(
+            x: dict[str, Union[dict, torch.Tensor]]
+    ) -> tuple[dict[str, torch.Tensor], torch.Tensor, dict[str, torch.Tensor]]:
+        return x["obs"], x["info"]["input_mask"], x["info"]["available_actions_mask"]
 
 
 class ConvEmbeddingInputLayer(nn.Module):

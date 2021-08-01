@@ -18,32 +18,34 @@ obs_space: FIXED_SHAPE_CONTINUOUS_OBS
 
 ## TRAINING params
 total_steps: 1e8
-num_actors: 4
+num_actors: 2
 n_actor_envs: 16
-unroll_length: 20
+unroll_length: 10
 batch_size: 16
-discounting: 0.99
+discounting: 0.9995
 
 ## MODEL params
 model_arch: dummy_conv_model
-dim: 128
+dim: 256
+normalize: True
 use_index_select: True
 
 ## OPTIMIZER params
 optimizer_class: RMSprop
-min_lr: 0.00001
 optimizer_kwargs:
-  lr: 0.0005
+  lr: 0.0002
   alpha: 0.9
+min_lr: 0.00001
 
 ## LOSS params
 entropy_cost: 0.0001
-baseline_cost: 0.5
+baseline_cost: 1.
 
 # MISCELLANEOUS params
 # load_dir: null
 actor_device: cuda:1
 learner_device: cuda:0
 disable_wandb: False
+model_log_freq: 100
 # file_descriptor or file_system
 sharing_strategy: file_descriptor
