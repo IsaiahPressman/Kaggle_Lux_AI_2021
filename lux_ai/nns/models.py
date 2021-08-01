@@ -42,7 +42,12 @@ class DictActor(nn.Module):
             ) for key, n_act in self.n_actions.items()
         })
 
-    def forward(self, x: torch.Tensor, sample: bool) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
+    def forward(
+            self,
+            x: torch.Tensor,
+            available_actions_mask: dict[str, torch.Tensor],
+            sample: bool
+    ) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
         policy_logits_out = {}
         actions_out = {}
         b, _, h, w = x.shape
@@ -52,6 +57,18 @@ class DictActor(nn.Module):
             logits = actor(x).view(b, n_actions, *action_plane_shape, h, w)
             # Move the logits dimension to the end
             logits = logits.permute(0, 2, 3, 4, 5, 1).contiguous()
+            # In case all actions are masked, unmask all actions
+            aam_filled = torch.where(
+                (~available_actions_mask[key]).all(dim=-1, keepdim=True),
+                torch.ones_like(available_actions_mask[key]),
+                available_actions_mask[key]
+            )
+            assert logits.shape == aam_filled.shape
+            logits = logits + torch.where(
+                aam_filled,
+                torch.zeros_like(logits),
+                torch.zeros_like(logits) + float("-inf")
+            )
             actions = DictActor.logits_to_actions(logits.view(-1, n_actions), sample)
             policy_logits_out[key] = logits
             actions_out[key] = actions.view(b, *action_plane_shape, h, w)
@@ -112,9 +129,13 @@ class BasicActorCriticNetwork(nn.Module):
             x: dict[str, Union[dict, torch.Tensor]],
             sample: bool = True
     ) -> dict[str, Any]:
-        x, input_mask = self.dict_input_layer(x)
+        x, input_mask, available_actions_mask = self.dict_input_layer(x)
         base_out, _ = self.base_model((x, input_mask))
-        policy_logits, actions = self.actor(self.actor_base(base_out), sample)
+        policy_logits, actions = self.actor(
+            self.actor_base(base_out),
+            available_actions_mask=available_actions_mask,
+            sample=sample
+        )
         baseline = self.baseline(base_out)
         return dict(
             actions=actions,

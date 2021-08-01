@@ -23,8 +23,33 @@ def create_model(flags, device: torch.device) -> nn.Module:
                 out_channels=flags.dim,
                 height=MAX_BOARD_SIZE[0],
                 width=MAX_BOARD_SIZE[1],
-                kernel_size=3
+                kernel_size=3,
+                normalize=flags.normalize,
             ),
+            FullConvResidualBlock(
+                in_channels=flags.dim,
+                out_channels=flags.dim,
+                height=MAX_BOARD_SIZE[0],
+                width=MAX_BOARD_SIZE[1],
+                kernel_size=3,
+                normalize=flags.normalize,
+            ),
+            FullConvResidualBlock(
+                in_channels=flags.dim,
+                out_channels=flags.dim,
+                height=MAX_BOARD_SIZE[0],
+                width=MAX_BOARD_SIZE[1],
+                kernel_size=3,
+                normalize=flags.normalize,
+            ),
+            FullConvResidualBlock(
+                in_channels=flags.dim,
+                out_channels=flags.dim,
+                height=MAX_BOARD_SIZE[0],
+                width=MAX_BOARD_SIZE[1],
+                kernel_size=3,
+                normalize=flags.normalize,
+            )
         )
         model = BasicActorCriticNetwork(
             base_model=base_model,

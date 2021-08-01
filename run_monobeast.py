@@ -11,6 +11,7 @@ from omegaconf import OmegaConf, DictConfig
 from pathlib import Path
 import torch
 from types import SimpleNamespace
+import wandb
 
 from lux_ai.lux_gym import act_spaces, obs_spaces
 from lux_ai.torchbeast.monobeast import train
@@ -85,6 +86,13 @@ def main(flags: DictConfig):
     flags = get_default_flags(flags)
     logging.info(OmegaConf.to_yaml(flags, resolve=True))
     OmegaConf.save(flags, "config.yaml")
+    if not flags.disable_wandb:
+        wandb.init(
+            project=flags.project,
+            config=vars(flags),
+            group=flags.group,
+            entity=flags.entity,
+        )
     train(flags_to_namespace(flags))
 
 
