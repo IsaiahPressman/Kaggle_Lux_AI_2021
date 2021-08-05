@@ -8,15 +8,16 @@ from kaggle_environments import make
 import math
 from pathlib import Path
 import random
-from scipy.stats import rankdata
 from subprocess import Popen, PIPE
 from typing import Optional, NoReturn
 
 from ..lux.game import Game
 from ..lux.game_constants import GAME_CONSTANTS
 from ..lux.game_objects import Unit, CityTile
+from ..lux_gym.act_spaces import BaseActSpace, ACTION_MEANINGS, ACTION_MEANINGS_TO_IDX, DIRECTIONS, RESOURCES
 from ..lux_gym.obs_spaces import ObsSpace, MAX_BOARD_SIZE
-from ..lux_gym.act_spaces import BasicActionSpace, ACTION_MEANINGS, ACTION_MEANINGS_TO_IDX, DIRECTIONS, RESOURCES
+from ..lux_gym.reward_spaces import BaseRewardSpace
+
 
 DIR_PATH = Path(__file__).parent.parent
 
@@ -26,14 +27,6 @@ def _cleanup_dimensions_factory(dimension_process: Popen) -> NoReturn:
         if dimension_process is not None:
             dimension_process.kill()
     return cleanup_dimensions
-
-
-def _compute_reward(player):
-    ct_count = sum([len(v.citytiles) for k, v in player.cities.items()])
-    unit_count = len(player.units)
-    # max board size is 32 x 32 => 1024 max city tiles and units,
-    # so this should keep it strictly so we break by city tiles then unit count
-    return ct_count * 1000 + unit_count
 
 
 def _generate_pos_to_unit_dict(game_state: Game) -> dict[tuple, Optional[Unit]]:
@@ -60,13 +53,16 @@ class LuxEnv(gym.Env):
 
     def __init__(
             self,
+            act_space: BaseActSpace,
             obs_space: ObsSpace,
+            reward_space: BaseRewardSpace,
             configuration: Optional[dict[str, any]] = None,
             seed: Optional[int] = None,
     ):
         super(LuxEnv, self).__init__()
         self.obs_space = obs_space
-        self.action_space = BasicActionSpace()
+        self.action_space = act_space
+        self.reward_space = reward_space
         self.observation_space = self.obs_space.get_obs_spec()
         self.board_dims = MAX_BOARD_SIZE
 
@@ -125,7 +121,8 @@ class LuxEnv(gym.Env):
         self.pos_to_city_tile_dict = _generate_pos_to_city_tile_dict(self.game_state)
         self._update_available_actions_mask()
 
-        return self.obs, [0., 0.], self.done, copy.copy(self.info)
+        rewards = self.reward_space.compute_rewards(self.game_state, self.done)
+        return self.obs, rewards, self.done, copy.copy(self.info)
 
     def step(self, action: dict[str, np.ndarray]):
         actions_processed, actions_taken = self.action_space.process_actions(
@@ -140,15 +137,7 @@ class LuxEnv(gym.Env):
         self.pos_to_city_tile_dict = _generate_pos_to_city_tile_dict(self.game_state)
         self._update_available_actions_mask()
 
-        # 3.3 : handle rewards when done
-        if self.done:
-            # reward here is defined as the sum of number of city tiles with unit count as a tie-breaking mechanism
-            rewards = [int(_compute_reward(p)) for p in self.game_state.players]
-            rewards = (rankdata(rewards) - 1.) * 2. - 1.
-            rewards = list(rewards)
-        else:
-            rewards = [0., 0.]
-
+        rewards = self.reward_space.compute_rewards(self.game_state, self.done)
         return self.obs, rewards, self.done, copy.copy(self.info)
 
     def _step(self, action: list[list[str]]) -> NoReturn:

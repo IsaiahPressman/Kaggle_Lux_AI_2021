@@ -6,6 +6,7 @@ import torch.nn.functional as F
 from typing import *
 
 from .in_blocks import DictInputLayer
+from ..lux_gym.reward_spaces import RewardSpec
 
 
 class DictActor(nn.Module):
@@ -26,14 +27,14 @@ class DictActor(nn.Module):
             raise ValueError(f"Each action space must have the same number of actions throughout the space. "
                              f"Found: {act_space_n_acts}")
         self.n_actions = {
-            key: space.nvec.min() for key, space in action_space.spaces.items()
+            key: space.nvec.max() for key, space in action_space.spaces.items()
         }
-        # An action plane shape usually takes the form (n, 2), where n >= 1 and is used when multiple stacked units
-        # must output different actions. The 2 players also use different action planes
+        # An action plane shape usually takes the form (n,), where n >= 1 and is used when multiple stacked units
+        # must output different actions.
         self.action_plane_shapes = {
-            key: space.shape[:-2] for key, space in action_space.spaces.items()
+            key: space.shape[:-3] for key, space in action_space.spaces.items()
         }
-        assert all([len(aps) == 2 for aps in self.action_plane_shapes.values()])
+        assert all([len(aps) == 1 for aps in self.action_plane_shapes.values()])
         self.actors = nn.ModuleDict({
             key: nn.Conv2d(
                 in_channels,
@@ -48,15 +49,19 @@ class DictActor(nn.Module):
             available_actions_mask: dict[str, torch.Tensor],
             sample: bool
     ) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
+        """
+        Expects an input of shape batch_size * 2, n_channels, h, w
+        This input will be projected by the actors, and then converted to shape batch_size, 2, n_channels, h, w
+        """
         policy_logits_out = {}
         actions_out = {}
         b, _, h, w = x.shape
         for key, actor in self.actors.items():
             n_actions = self.n_actions[key]
             action_plane_shape = self.action_plane_shapes[key]
-            logits = actor(x).view(b, n_actions, *action_plane_shape, h, w)
-            # Move the logits dimension to the end
-            logits = logits.permute(0, 2, 3, 4, 5, 1).contiguous()
+            logits = actor(x).view(b // 2, 2, n_actions, *action_plane_shape, h, w)
+            # Move the logits dimension to the end and swap the player and channel dimensions
+            logits = logits.permute(0, 3, 1, 4, 5, 2).contiguous()
             # In case all actions are masked, unmask all actions
             aam_filled = torch.where(
                 (~available_actions_mask[key]).all(dim=-1, keepdim=True),
@@ -71,7 +76,7 @@ class DictActor(nn.Module):
             )
             actions = DictActor.logits_to_actions(logits.view(-1, n_actions), sample)
             policy_logits_out[key] = logits
-            actions_out[key] = actions.view(b, *action_plane_shape, h, w)
+            actions_out[key] = actions.view(*logits.shape[:-1])
         return policy_logits_out, actions_out
 
     @staticmethod
@@ -82,14 +87,27 @@ class DictActor(nn.Module):
             return logits.argmax(dim=-1)
 
 
-class ValueActivation(nn.Module):
-    def __init__(self, dim: int):
-        super(ValueActivation, self).__init__()
-        self.dim = dim
+class BaselineLayer(nn.Module):
+    def __init__(self, in_channels: int, reward_space: RewardSpec):
+        super(BaselineLayer, self).__init__()
+        self.linear = nn.Linear(in_channels, 1)
+        if reward_space.zero_sum:
+            self.activation = nn.Softmax(dim=-1)
+        else:
+            self.activation = nn.Sigmoid()
+        self.reward_min = reward_space.reward_min
+        self.reward_max = reward_space.reward_max
 
     def forward(self, x: torch.Tensor):
-        # Rescale to [-1, 1]
-        return 2 * F.softmax(x, self.dim) - 1.
+        """
+        Expects an input of shape b * 2, n_channels
+        Returns an output of shape b, 2
+        """
+        # Project and reshape input
+        x = self.linear(x).view(-1, 2)
+        # Rescale to [0, 1], and then to the desired reward space
+        x = self.activation(x)
+        return x * (self.reward_max - self.reward_min) + self.reward_min
 
 
 class BasicActorCriticNetwork(nn.Module):
@@ -98,9 +116,9 @@ class BasicActorCriticNetwork(nn.Module):
             base_model: nn.Module,
             base_out_channels: int,
             action_space: gym.spaces.Dict,
+            reward_space: RewardSpec,
             actor_critic_activation: Callable = nn.ReLU,
             n_action_value_layers: int = 2,
-            final_value_activation: nn.Module = ValueActivation(dim=-1),
     ):
         super(BasicActorCriticNetwork, self).__init__()
         self.dict_input_layer = DictInputLayer()
@@ -118,10 +136,9 @@ class BasicActorCriticNetwork(nn.Module):
         self.actor_base = nn.Sequential(*actor_layers)
         self.actor = DictActor(self.base_out_channels, action_space)
 
-        baseline_layers.append(nn.AdaptiveAvgPool2d(1))
-        baseline_layers.append(nn.Flatten())
-        baseline_layers.append(nn.Linear(self.base_out_channels, 2))
-        baseline_layers.append(final_value_activation)
+        baseline_layers.append(nn.AdaptiveAvgPool2d((1, 1)))
+        baseline_layers.append(nn.Flatten(start_dim=1, end_dim=-1))
+        baseline_layers.append(BaselineLayer(self.base_out_channels, reward_space))
         self.baseline = nn.Sequential(*baseline_layers)
 
     def forward(

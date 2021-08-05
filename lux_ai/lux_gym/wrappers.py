@@ -68,11 +68,12 @@ class PadEnv(gym.Wrapper):
 class LoggingEnv(gym.Wrapper):
     def __init__(self, env: gym.Env):
         super(LoggingEnv, self).__init__(env)
-        self.peak_city_tile_count = np.array([1., 1.])
-        # TODO: Resource mining % like in visualizer
+        self.vals_peak = {}
+        self.reward_sums = [0., 0.]
+        # TODO: Resource mining % like in visualizer?
         # self.resource_count = {"wood", etc...}
 
-    def info(self, info: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+    def info(self, info: dict[str, np.ndarray], rewards: list[int]) -> dict[str, np.ndarray]:
         info = copy.copy(info)
         game_state = self.env.unwrapped.game_state
         logs = {
@@ -83,19 +84,38 @@ class LoggingEnv(gym.Wrapper):
             "carts": [sum(u.is_cart() for u in p.units) for p in game_state.players],
             "research_points": [p.research_points for p in game_state.players],
         }
-        self.peak_city_tile_count = np.maximum(self.peak_city_tile_count, logs["city_tiles"])
-        logs["peak_city_tiles"] = self.peak_city_tile_count.copy()
+        self.vals_peak = {
+            key: np.maximum(val, logs[key]) for key, val in self.vals_peak.items()
+        }
+        logs.update({f"{key}_peak": val.copy() for key, val in self.vals_peak.items()})
+
+        self.reward_sums = [r + s for r, s in zip(rewards, self.reward_sums)]
+        logs["p1_reward_sums"] = [self.reward_sums[0]]
+        logs["p2_reward_sums"] = [self.reward_sums[1]]
+        logs["mean_reward_sums"] = [np.mean(self.reward_sums)]
         info.update({f"logging_{key}": np.array(val, dtype=np.float32) for key, val in logs.items()})
         return info
 
     def reset(self, **kwargs):
         obs, reward, done, info = super(LoggingEnv, self).reset(**kwargs)
-        self.peak_city_tile_count[:] = 1.
-        return obs, reward, done, self.info(info)
+        self._reset_peak_vals()
+        self.reward_sums = [0., 0.]
+        return obs, reward, done, self.info(info, reward)
 
     def step(self, action: dict[str, np.ndarray]):
         obs, reward, done, info = super(LoggingEnv, self).step(action)
-        return obs, reward, done, self.info(info)
+        return obs, reward, done, self.info(info, reward)
+
+    def _reset_peak_vals(self) -> NoReturn:
+        self.vals_peak = {
+            key: np.array([0., 0.])
+            for key in [
+                "city_tiles",
+                "separate_cities",
+                "workers",
+                "carts",
+            ]
+        }
 
 
 class VecEnv(gym.Env):
