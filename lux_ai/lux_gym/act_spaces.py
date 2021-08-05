@@ -252,7 +252,7 @@ class BasicActionSpace(BaseActSpace):
                     else:
                         action_idx = action_tensors_dict[unit_type][action_plane, p_id, x, y]
                         action = get_unit_action(unit, action_idx, pos_to_unit_dict)
-                    actions_taken[unit_type][action_plane, p_id, x, y] = True
+                        actions_taken[unit_type][action_plane, p_id, x, y] = True
                     # None means no-op
                     # "" means invalid transfer action - fed to game as no-op
                     if action is not None and action != "":
