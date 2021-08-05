@@ -20,9 +20,9 @@ reward_space: CityTileReward
 ## TRAINING params
 total_steps: 1e8
 num_actors: 2
-n_actor_envs: 4
+n_actor_envs: 2
 unroll_length: 5
-batch_size: 4
+batch_size: 2
 discounting: 0.9995
 
 ## MODEL params
