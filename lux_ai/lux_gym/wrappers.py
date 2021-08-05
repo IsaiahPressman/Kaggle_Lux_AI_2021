@@ -90,9 +90,8 @@ class LoggingEnv(gym.Wrapper):
         logs.update({f"{key}_peak": val.copy() for key, val in self.vals_peak.items()})
 
         self.reward_sums = [r + s for r, s in zip(rewards, self.reward_sums)]
-        logs["p1_reward_sums"] = [self.reward_sums[0]]
-        logs["p2_reward_sums"] = [self.reward_sums[1]]
-        logs["mean_reward_sums"] = [np.mean(self.reward_sums)]
+        logs["reward_sums"] = [np.mean(self.reward_sums)]
+        logs["reward_sum_magnitudes"] = [np.mean(np.abs(self.reward_sums))]
         info.update({f"logging_{key}": np.array(val, dtype=np.float32) for key, val in logs.items()})
         return info
 

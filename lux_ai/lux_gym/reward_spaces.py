@@ -52,6 +52,19 @@ class GameResultReward(BaseRewardSpace):
 class CityTileReward(BaseRewardSpace):
     def get_reward_spec(self) -> RewardSpec:
         return RewardSpec(
+            reward_min=0.,
+            reward_max=1.,
+            zero_sum=False
+        )
+
+    def compute_rewards(self, game_state: Game, done: bool) -> list[float]:
+        ct_count = np.array([player.city_tile_count for player in game_state.players])
+        return list(ct_count / 1024.)
+
+
+class CityTileRewardZeroSum(BaseRewardSpace):
+    def get_reward_spec(self) -> RewardSpec:
+        return RewardSpec(
             reward_min=-1.,
             reward_max=1.,
             zero_sum=True
