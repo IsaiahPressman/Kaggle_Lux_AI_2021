@@ -42,7 +42,7 @@ def create_model(flags, device: torch.device) -> nn.Module:
             action_space=flags.act_space.get_action_space(),
             reward_space=flags.reward_space.get_reward_spec(),
         )
-
+        
     elif flags.model_arch == "dummy_attention_model":
         base_model = nn.Sequential(
             ConvEmbeddingInputLayer(
