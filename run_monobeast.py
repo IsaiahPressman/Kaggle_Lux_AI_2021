@@ -71,7 +71,7 @@ def flags_to_namespace(flags: DictConfig) -> SimpleNamespace:
     return flags
 
 
-@hydra.main(config_path="conf", config_name="config")
+@hydra.main(config_path="conf", config_name="attention_config")
 def main(flags: DictConfig):
     cli_conf = OmegaConf.from_cli()
     if Path("config.yaml").exists():
