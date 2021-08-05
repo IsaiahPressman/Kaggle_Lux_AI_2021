@@ -10,7 +10,7 @@ project: Lux_AI_2021
 # The wandb user to log to
 entity: isaiahpressman
 # The wandb group for the run
-group: group1
+group: conv
 
 ## ENV params
 act_space: BasicActionSpace
@@ -20,17 +20,22 @@ reward_space: CityTileReward
 ## TRAINING params
 total_steps: 1e8
 num_actors: 2
-n_actor_envs: 4
+n_actor_envs: 16
 unroll_length: 5
-batch_size: 4
+batch_size: 16
 discounting: 0.9995
 
 ## MODEL params
-model_arch: attention_model
-n_blocks: 4
+model_arch: conv_model
+n_blocks: 6
 hidden_dim: 128
 normalize: True
 use_index_select: True
+# Conv-specific params
+kernel_size: 5
+# Attention-specific params
+mhsa_heads: 4
+
 
 ## OPTIMIZER params
 optimizer_class: RMSprop

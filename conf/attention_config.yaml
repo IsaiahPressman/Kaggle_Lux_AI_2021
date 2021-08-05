@@ -1,0 +1,58 @@
+defaults:
+- override hydra/job_logging: colorlog
+- override hydra/hydra_logging: colorlog
+
+name: null
+
+## WANDB params
+# The wandb project name
+project: Lux_AI_2021
+# The wandb user to log to
+entity: isaiahpressman
+# The wandb group for the run
+group: attention
+
+## ENV params
+act_space: BasicActionSpace
+obs_space: FIXED_SHAPE_CONTINUOUS_OBS
+reward_space: CityTileReward
+
+## TRAINING params
+total_steps: 1e8
+num_actors: 2
+n_actor_envs: 4
+unroll_length: 5
+batch_size: 4
+discounting: 0.9995
+
+## MODEL params
+model_arch: attention_model
+n_blocks: 8
+hidden_dim: 128
+normalize: True
+use_index_select: True
+# Conv-specific params
+kernel_size: 5
+# Attention-specific params
+mhsa_heads: 4
+
+
+## OPTIMIZER params
+optimizer_class: RMSprop
+optimizer_kwargs:
+  lr: 1e-4
+  alpha: 0.9
+min_lr_mod: 0.01
+
+## LOSS params
+entropy_cost: 0.0002
+baseline_cost: 1.
+
+# MISCELLANEOUS params
+# load_dir: null
+actor_device: cuda:1
+learner_device: cuda:0
+disable_wandb: False
+model_log_freq: 100
+# file_descriptor or file_system
+sharing_strategy: file_descriptor
