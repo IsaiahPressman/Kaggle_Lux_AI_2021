@@ -35,9 +35,9 @@ class RelPosSelfAttention(nn.Module):
             logits += self.relative_logits(q)
         weights = torch.reshape(logits, [-1, heads, h, w, h * w])
         weights = weights + torch.where(
-            attn_mask.view(-1, 1, h, w, 1) == 0.,
-            torch.zeros_like(weights) + float('-inf'),
-            torch.zeros_like(weights)
+            attn_mask.view(-1, 1, 1, 1, h * w),
+            torch.zeros_like(weights),
+            torch.zeros_like(weights) + float('-inf')
         )
         weights = F.softmax(weights, dim=-1)
         weights = torch.reshape(weights, [-1, heads, h, w, h, w])

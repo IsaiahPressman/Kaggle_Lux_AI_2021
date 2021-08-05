@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+from contextlib import contextmanager
 import logging
 import math
 import os
@@ -38,6 +38,7 @@ from ..lux_gym import create_env
 from ..nns import create_model
 
 
+LOCK_TIMEOUT = 2.
 # TODO: Reformat logging
 logging.basicConfig(
     format=(
@@ -62,14 +63,14 @@ def compute_baseline_loss(advantages: torch.Tensor, reduction: str) -> torch.Ten
 
 def compute_entropy_loss(logits: torch.Tensor, reduction: str) -> torch.Tensor:
     """Return the entropy loss, i.e., the negative entropy of the policy."""
-    logits_masked_zeroed = torch.where(
-        logits.detach().isneginf(),
-        torch.zeros_like(logits),
-        logits
-    )
     policy = F.softmax(logits, dim=-1)
-    log_policy = F.log_softmax(logits_masked_zeroed, dim=-1)
-    return reduce((policy * log_policy).sum(dim=-1), reduction)
+    log_policy = F.log_softmax(logits, dim=-1)
+    log_policy_masked_zeroed = torch.where(
+        log_policy.isneginf(),
+        torch.zeros_like(log_policy),
+        log_policy
+    )
+    return reduce((policy * log_policy_masked_zeroed).sum(dim=-1), reduction)
 
 
 def compute_policy_gradient_loss(
@@ -85,6 +86,15 @@ def compute_policy_gradient_loss(
     )
     cross_entropy = cross_entropy.view_as(advantages)
     return reduce(cross_entropy * advantages.detach(), reduction)
+
+
+# From https://stackoverflow.com/questions/16740104/python-lock-with-statement-and-timeout
+@contextmanager
+def acquire_timeout(lock: threading.Lock, timeout: float):
+    result = lock.acquire(timeout=timeout)
+    yield result
+    if result:
+        lock.release()
 
 
 def act(
@@ -165,7 +175,7 @@ def get_batch(
     timings: prof.Timings,
     lock=threading.Lock(),
 ):
-    with lock:
+    with acquire_timeout(lock, LOCK_TIMEOUT):
         timings.time("lock")
         indices = [full_queue.get() for _ in range(flags.batch_size // flags.n_actor_envs)]
         timings.time("dequeue")
@@ -190,7 +200,7 @@ def learn(
     lock=threading.Lock(),
 ):
     """Performs a learning (optimization) step."""
-    with lock:
+    with acquire_timeout(lock, LOCK_TIMEOUT):
         with amp.autocast(enabled=flags.use_mixed_precision):
             flattened_batch = buffers_apply(batch, lambda x: torch.flatten(x, start_dim=0, end_dim=1))
             learner_outputs = learner_model(flattened_batch)
@@ -202,8 +212,6 @@ def learn(
             bootstrap_value = learner_outputs["baseline"][-1]
 
             # Move from obs[t] -> action[t] to action[t] -> obs[t].
-            # batch = {key: tensor[1:] for key, tensor in batch.items()}
-            # learner_outputs = {key: tensor[:-1] for key, tensor in learner_outputs.items()}
             batch = buffers_apply(batch, lambda x: x[1:])
             learner_outputs = buffers_apply(learner_outputs, lambda x: x[:-1])
 
@@ -232,21 +240,28 @@ def learn(
                     bootstrap_value=bootstrap_value_expanded,
                 )
                 actions_taken_mask = batch["info"]["actions_taken"][act_space]
-
-                losses["pg"][act_space] = compute_policy_gradient_loss(
-                    learner_policy_logits[actions_taken_mask],
-                    actions[actions_taken_mask],
-                    vtrace_returns.pg_advantages[actions_taken_mask],
-                    reduction=flags.reduction
-                )
-                losses["baseline"][act_space] = flags.baseline_cost * compute_baseline_loss(
-                    vtrace_returns.vs[actions_taken_mask] - values[actions_taken_mask],
-                    reduction=flags.reduction
-                )
-                losses["entropy"][act_space] = flags.entropy_cost * compute_entropy_loss(
-                    learner_policy_logits[actions_taken_mask],
-                    reduction=flags.reduction
-                )
+                if actions_taken_mask.sum() == 0:
+                    # Mean of an empty tensor will be NaN, so we cannot compute the loss when no actions of the 
+                    # given act_space were taken
+                    loss = torch.zeros(1, device=flags.learner_device).sum()
+                    losses["pg"][act_space] = loss
+                    losses["baseline"][act_space] = loss
+                    losses["entropy"][act_space] = loss
+                else:
+                    losses["pg"][act_space] = compute_policy_gradient_loss(
+                        learner_policy_logits[actions_taken_mask],
+                        actions[actions_taken_mask],
+                        vtrace_returns.pg_advantages[actions_taken_mask],
+                        reduction=flags.reduction
+                    )
+                    losses["baseline"][act_space] = flags.baseline_cost * compute_baseline_loss(
+                        vtrace_returns.vs[actions_taken_mask] - values[actions_taken_mask],
+                        reduction=flags.reduction
+                    )
+                    losses["entropy"][act_space] = flags.entropy_cost * compute_entropy_loss(
+                        learner_policy_logits[actions_taken_mask],
+                        reduction=flags.reduction
+                    )
             total_loss = torch.stack([loss for d in losses.values() for loss in d.values()]).sum()
 
             last_lr = lr_scheduler.get_last_lr()
@@ -310,8 +325,6 @@ def learn(
 def train(flags):
     # Necessary for multithreading and multiprocessing
     os.environ["OMP_NUM_THREADS"] = "1"
-    mp.set_start_method("spawn")
-    mp.set_sharing_strategy(flags.sharing_strategy)
 
     if flags.num_actors >= flags.num_buffers:
         raise ValueError("num_buffers should be larger than num_actors")
@@ -366,7 +379,7 @@ def train(flags):
     )
 
     def lr_lambda(epoch):
-        min_pct = flags.min_lr / flags.optimizer_kwargs["lr"]
+        min_pct = flags.min_lr_mod
         pct_complete = min(epoch * t * b * n, flags.total_steps) / flags.total_steps
         scaled_pct_complete = pct_complete * (1. - min_pct) + min_pct
         return 1. - scaled_pct_complete

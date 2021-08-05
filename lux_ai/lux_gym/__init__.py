@@ -11,7 +11,12 @@ def create_env(flags, device: torch.device, seed: Optional[int] = None) -> DictE
         seed = flags.seed
     envs = []
     for i in range(flags.n_actor_envs):
-        env = LuxEnv(obs_space=flags.obs_space, seed=seed)
+        env = LuxEnv(
+            act_space=flags.act_space,
+            obs_space=flags.obs_space,
+            reward_space=flags.reward_space,
+            seed=seed
+        )
         env = flags.obs_space.wrap_env(env)
         env = PadEnv(env)
         env = LoggingEnv(env)

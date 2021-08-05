@@ -10,10 +10,11 @@ import os
 from omegaconf import OmegaConf, DictConfig
 from pathlib import Path
 import torch
+from torch import multiprocessing as mp
 from types import SimpleNamespace
 import wandb
 
-from lux_ai.lux_gym import act_spaces, obs_spaces
+from lux_ai.lux_gym import act_spaces, obs_spaces, reward_spaces
 from lux_ai.torchbeast.monobeast import train
 
 
@@ -57,6 +58,8 @@ def flags_to_namespace(flags: DictConfig) -> SimpleNamespace:
     flags.act_space = act_spaces.__dict__[flags.act_space]()
     assert isinstance(flags.act_space, act_spaces.BaseActSpace), f"{flags.act_space}"
     flags.obs_space = obs_spaces.ObsSpace[flags.obs_space]
+    flags.reward_space = reward_spaces.__dict__[flags.reward_space]()
+    assert isinstance(flags.reward_space, reward_spaces.BaseRewardSpace), f"{flags.reward_space}"
 
     # Optimizer params
     flags.optimizer_class = torch.optim.__dict__[flags.optimizer_class]
@@ -93,8 +96,12 @@ def main(flags: DictConfig):
             group=flags.group,
             entity=flags.entity,
         )
-    train(flags_to_namespace(flags))
+
+    flags = flags_to_namespace(flags)
+    mp.set_sharing_strategy(flags.sharing_strategy)
+    train(flags)
 
 
 if __name__ == "__main__":
+    mp.set_start_method("spawn")
     main()

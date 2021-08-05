@@ -1,5 +1,5 @@
-import numpy as np
 import gym.spaces
+import numpy as np
 import torch
 from torch import nn
 from typing import *
@@ -65,13 +65,34 @@ class ConvEmbeddingInputLayer(nn.Module):
         self.select = _get_select_func(use_index_select)
 
     def forward(self, x: tuple[dict[str, torch.Tensor], torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Expects x to be a dictionary of tensors of shape (b, n, p|1, x, y) or (b, n, p|1)
+        Returns an output of shape (b * 2, embedding_dim, x, y) where the observation has been duplicated and the
+        player axes swapped for the opposing players
+        """
         x, input_mask = x
+        input_mask = torch.repeat_interleave(input_mask, 2, dim=0)
         continuous_outs = []
         embedding_outs = {}
         for key, op in self.keys_to_op.items():
-            # Input should be of size (b, n, p, x, y) OR (b, n, p)
-            # Combine channel and player dims
-            out = torch.flatten(x[key], start_dim=1, end_dim=2)
+            # Input should be of size (b, n, p|1, x, y) OR (b, n, p|1)
+            in_tensor = x[key]
+            assert in_tensor.shape[2] <= 2
+            # First we duplicate each batch entry and swap player axes when relevant
+            in_tensor = in_tensor[
+                        :,
+                        :,
+                        [np.arange(in_tensor.shape[2]), np.arange(in_tensor.shape[2])[::-1]],
+                        ...
+                        ]
+            # Then we swap the new dims and channel dims so we can combine them with the batch dims
+            in_tensor = torch.flatten(
+                in_tensor.transpose(1, 2),
+                start_dim=0,
+                end_dim=1
+            )
+            # Finally, combine channel and player dims
+            out = torch.flatten(in_tensor, start_dim=1, end_dim=2)
             # Size is now (b, n*p, x, y) or (b, n*p)
             if op == "count":
                 embedding_expanded = embedding_outs[key[:-6]]
@@ -102,13 +123,6 @@ class ConvEmbeddingInputLayer(nn.Module):
                 continuous_outs.append(out * input_mask)
             else:
                 raise RuntimeError(f"Unknown operation: {op}")
-            """
-            while len(val.shape) < len(input_mask.shape):
-                val = val.unsqueeze(-1)
-            val = val.expand_as(input_mask)
-            # Size is now (b, n*p, x, y)
-            assert len(val.shape) == len(input_mask.shape)
-            """
         continuous_out_combined = self.continuous_space_embedding(torch.cat(continuous_outs, dim=1))
         embedding_outs_combined = torch.stack([v for v in embedding_outs.values()], dim=-1).sum(dim=-1)
         return continuous_out_combined + embedding_outs_combined, input_mask
