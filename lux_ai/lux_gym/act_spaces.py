@@ -106,7 +106,7 @@ def _transfer_factory(action_meaning: str) -> Callable[..., str]:
         # action could be bucketed if partial transfers become important.
         # The game engine automatically determines the actual maximum legal transfer
         # https://github.com/Lux-AI-Challenge/Lux-Design-2021/blob/master/src/Game/index.ts#L704
-        return unit.transfer(dest_id=dest_unit, resourceType=resource, amount=_MAX_CAPACITY)
+        return unit.transfer(dest_id=dest_unit.id, resourceType=resource, amount=_MAX_CAPACITY)
 
     return _transfer_func
 

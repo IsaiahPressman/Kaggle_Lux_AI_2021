@@ -127,7 +127,7 @@ class _FixedShapeContinuousObs(gym.Wrapper):
         observation, reward, done, info = self.env.step(action)
         return self.observation(observation), reward, done, info
 
-    def observation(self, observation):
+    def observation(self, observation: Game) -> dict[str, np.ndarray]:
         w_capacity = GAME_CONSTANTS["PARAMETERS"]["RESOURCE_CAPACITY"]["WORKER"]
         ca_capacity = GAME_CONSTANTS["PARAMETERS"]["RESOURCE_CAPACITY"]["CART"]
         w_cooldown = GAME_CONSTANTS["PARAMETERS"]["UNIT_ACTION_COOLDOWN"]["WORKER"] * 2. - 1.
