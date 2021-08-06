@@ -21,7 +21,7 @@ reward_space: CityTileReward
 total_steps: 1e8
 num_actors: 2
 n_actor_envs: 2
-unroll_length: 5
+unroll_length: 4
 batch_size: 2
 discounting: 0.9995
 
@@ -40,7 +40,7 @@ mhsa_heads: 4
 ## OPTIMIZER params
 optimizer_class: RMSprop
 optimizer_kwargs:
-  lr: 1e-4
+  lr: 2e-4
   alpha: 0.9
 min_lr_mod: 0.01
 

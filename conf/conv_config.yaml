@@ -27,7 +27,7 @@ discounting: 0.9995
 
 ## MODEL params
 model_arch: conv_model
-n_blocks: 6
+n_blocks: 8
 hidden_dim: 128
 normalize: True
 use_index_select: True
