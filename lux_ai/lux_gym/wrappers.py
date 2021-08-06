@@ -13,7 +13,7 @@ class PadEnv(gym.Wrapper):
         self.max_board_size = max_board_size
         self.observation_space = self.unwrapped.obs_space.get_obs_spec(max_board_size)
         self.input_mask = np.zeros((1,) + max_board_size, dtype=bool)
-        self.input_mask[:, :self.orig_board_dims[0], :self.orig_board_dims[1]] = 1
+        self.input_mask[:, :self.orig_board_dims[0], :self.orig_board_dims[1]] = True
 
     def _pad(self, x: Union[dict, np.ndarray]) -> Union[dict, np.ndarray]:
         if isinstance(x, dict):

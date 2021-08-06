@@ -1,8 +1,5 @@
-from omegaconf import OmegaConf
-from pathlib import Path
 import torch
 from torch import nn
-from typing import *
 
 from ..lux_gym.obs_spaces import MAX_BOARD_SIZE
 from .models import BasicActorCriticNetwork
@@ -126,6 +123,7 @@ def create_model(flags, device: torch.device) -> nn.Module:
     return model
 
 
+"""
 def load_model(load_dir: Union[Path, str], model_checkpoint: str, device: torch.device):
     flags = OmegaConf.load(load_dir + "/config.yaml")
     flags.checkpoint = Path(load_dir) / (model_checkpoint + ".pt")
@@ -134,3 +132,4 @@ def load_model(load_dir: Union[Path, str], model_checkpoint: str, device: torch.
     checkpoint_states = torch.load(flags.checkpoint, map_location=device)
     model.load_state_dict(checkpoint_states["model_state_dict"])
     return model
+"""
