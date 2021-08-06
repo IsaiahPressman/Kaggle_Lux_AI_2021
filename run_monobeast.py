@@ -9,12 +9,10 @@ import logging
 import os
 from omegaconf import OmegaConf, DictConfig
 from pathlib import Path
-import torch
 from torch import multiprocessing as mp
-from types import SimpleNamespace
 import wandb
 
-from lux_ai.lux_gym import act_spaces, obs_spaces, reward_spaces
+from lux_ai.utils import flags_to_namespace
 from lux_ai.torchbeast.monobeast import train
 
 
@@ -50,28 +48,7 @@ def get_default_flags(flags: DictConfig) -> DictConfig:
     return OmegaConf.create(flags)
 
 
-def flags_to_namespace(flags: DictConfig) -> SimpleNamespace:
-    flags = OmegaConf.to_container(flags)
-    flags = SimpleNamespace(**flags)
-
-    # Env params
-    flags.act_space = act_spaces.__dict__[flags.act_space]()
-    assert isinstance(flags.act_space, act_spaces.BaseActSpace), f"{flags.act_space}"
-    flags.obs_space = obs_spaces.ObsSpace[flags.obs_space]
-    flags.reward_space = reward_spaces.__dict__[flags.reward_space]()
-    assert isinstance(flags.reward_space, reward_spaces.BaseRewardSpace), f"{flags.reward_space}"
-
-    # Optimizer params
-    flags.optimizer_class = torch.optim.__dict__[flags.optimizer_class]
-
-    # Miscellaneous params
-    flags.actor_device = torch.device(flags.actor_device)
-    flags.learner_device = torch.device(flags.learner_device)
-
-    return flags
-
-
-@hydra.main(config_path="conf", config_name="attention_config")
+@hydra.main(config_path="conf", config_name="attn_config")
 def main(flags: DictConfig):
     cli_conf = OmegaConf.from_cli()
     if Path("config.yaml").exists():
@@ -97,7 +74,7 @@ def main(flags: DictConfig):
             entity=flags.entity,
         )
 
-    flags = flags_to_namespace(flags)
+    flags = flags_to_namespace(OmegaConf.to_container(flags))
     mp.set_sharing_strategy(flags.sharing_strategy)
     train(flags)
 
