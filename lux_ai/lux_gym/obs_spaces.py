@@ -10,11 +10,11 @@ from ..lux.game_constants import GAME_CONSTANTS
 MAX_BOARD_SIZE = (32, 32)
 MAX_RESOURCE = {
     # https://github.com/Lux-AI-Challenge/Lux-Design-2021/blob/master/src/Game/gen.ts#L227
-    Constants.RESOURCE_TYPES.WOOD: 1300.,
+    Constants.RESOURCE_TYPES.WOOD: 400.,
     # https://github.com/Lux-AI-Challenge/Lux-Design-2021/blob/master/src/Game/gen.ts#L248
-    Constants.RESOURCE_TYPES.COAL: 450.,
+    Constants.RESOURCE_TYPES.COAL: 650.,
     # https://github.com/Lux-AI-Challenge/Lux-Design-2021/blob/master/src/Game/gen.ts#L269
-    Constants.RESOURCE_TYPES.URANIUM: 350.
+    Constants.RESOURCE_TYPES.URANIUM: 600.
 }
 
 # TODO: Fix max fuel amount

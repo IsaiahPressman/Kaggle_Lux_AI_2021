@@ -24,6 +24,7 @@ RESOURCES = (
     Constants.RESOURCE_TYPES.URANIUM
 )
 _MAX_CAPACITY = max(GAME_CONSTANTS["PARAMETERS"]["RESOURCE_CAPACITY"].values())
+_MAX_RESEARCH = max(GAME_CONSTANTS["PARAMETERS"]["RESEARCH_REQUIREMENTS"].values())
 
 ACTION_MEANINGS = {
     "worker": [
@@ -152,18 +153,19 @@ class BaseActSpace(ABC):
     ) -> tuple[list[list[str]], dict[str, np.ndarray]]:
         pass
 
+    @abstractmethod
+    def get_available_actions_mask(
+            self,
+            game_state: Game,
+            board_dims: tuple[int, int],
+            pos_to_unit_dict: dict[tuple, Optional[Unit]],
+            pos_to_city_tile_dict: dict[tuple, Optional[CityTile]]
+    ) -> dict[str, np.ndarray]:
+        pass
+
     @cached_property
     def keys(self) -> tuple[str, ...]:
         return tuple(self.get_action_space().spaces.keys())
-
-    @cached_property
-    def _DEPRECATING_act_space_channel_slices(self) -> dict[str, slice]:
-        channel_slices = {}
-        last_val = 0
-        for key, val in self.get_action_space().spaces.items():
-            channel_slices[key] = slice(last_val, val)
-            last_val = val
-        return channel_slices
 
     def from_dict(
             self,
@@ -176,17 +178,6 @@ class BaseActSpace(ABC):
             return concatenation_func([actions_like[key] for key in self.keys], -5)
         else:
             return concatenation_func([actions_like[key] for key in self.keys], -4)
-
-    def DEPRECATING_to_dict(self, actions_array_like: Any, expanded: bool = False) -> dict[str, Any]:
-        if expanded:
-            # In the case that the actions dimension has been expanded at the end
-            return {
-                key: actions_array_like[..., s, :, :, :, :] for key, s in self._DEPRECATING_act_space_channel_slices
-            }
-        else:
-            return {
-                key: actions_array_like[..., s, :, :, :] for key, s in self._DEPRECATING_act_space_channel_slices
-            }
 
 
 class BasicActionSpace(BaseActSpace):
@@ -271,6 +262,140 @@ class BasicActionSpace(BaseActSpace):
                             # noinspection PyTypeChecker
                             action_strs[p_id].append(action)
         return action_strs, actions_taken
+
+    def get_available_actions_mask(
+            self,
+            game_state: Game,
+            board_dims: tuple[int, int],
+            pos_to_unit_dict: dict[tuple, Optional[Unit]],
+            pos_to_city_tile_dict: dict[tuple, Optional[CityTile]]
+    ) -> dict[str, np.ndarray]:
+        available_actions_mask = {
+            key: np.ones(space.shape + (len(ACTION_MEANINGS[key]),), dtype=bool)
+            for key, space in self.get_action_space(board_dims).spaces.items()
+        }
+        for player in game_state.players:
+            p_id = player.team
+            for unit in player.units:
+                if unit.can_act():
+                    x, y = unit.pos.x, unit.pos.y
+                    if unit.is_worker():
+                        unit_type = "worker"
+                    elif unit.is_cart():
+                        unit_type = "cart"
+                    else:
+                        raise NotImplementedError(f"New unit type: {unit}")
+                    # No-op is always a legal action
+                    # Moving is usually a legal action, except when:
+                    #   The unit is at the edge of the board and would try to move off of it
+                    #   The unit would move onto an opposing city tile
+                    #   The unit would move onto another unit with cooldown > 0
+                    # Transferring is only a legal action when there is an allied unit in the target square
+                    # Workers: Pillaging is only a legal action when on a road tile and is not on an allied city
+                    # Workers: Building a city is only a legal action when the worker has the required resources and
+                    #       is not on a resource tile
+                    for direction in DIRECTIONS:
+                        new_pos_tuple = unit.pos.translate(direction, 1)
+                        new_pos_tuple = new_pos_tuple.x, new_pos_tuple.y
+                        # Moving and transferring - check that the target position exists on the board
+                        if new_pos_tuple not in pos_to_unit_dict.keys():
+                            available_actions_mask[unit_type][
+                                :,
+                                p_id,
+                                x,
+                                y,
+                                ACTION_MEANINGS_TO_IDX[unit_type][f"MOVE_{direction}"]
+                            ] = False
+                            for resource in RESOURCES:
+                                available_actions_mask[unit_type][
+                                    :,
+                                    p_id,
+                                    x,
+                                    y,
+                                    ACTION_MEANINGS_TO_IDX[unit_type][f"TRANSFER_{resource}_{direction}"]
+                                ] = False
+                            continue
+                        # Moving - check that the target position does not contain an opposing city tile
+                        new_pos_city_tile = pos_to_city_tile_dict[new_pos_tuple]
+                        if new_pos_city_tile and new_pos_city_tile.team != p_id:
+                            available_actions_mask[unit_type][
+                                :,
+                                p_id,
+                                x,
+                                y,
+                                ACTION_MEANINGS_TO_IDX[unit_type][f"MOVE_{direction}"]
+                            ] = False
+                        # Moving - check that the target position does not contain a unit with cooldown > 0
+                        new_pos_unit = pos_to_unit_dict[new_pos_tuple]
+                        if new_pos_unit and new_pos_unit.cooldown > 0:
+                            available_actions_mask[unit_type][
+                                :,
+                                p_id,
+                                x,
+                                y,
+                                ACTION_MEANINGS_TO_IDX[unit_type][f"MOVE_{direction}"]
+                            ] = False
+                        # Transferring - check that there is an allied unit in the target square
+                        if new_pos_unit is None or new_pos_unit.team != p_id:
+                            for resource in RESOURCES:
+                                available_actions_mask[unit_type][
+                                    :,
+                                    p_id,
+                                    x,
+                                    y,
+                                    ACTION_MEANINGS_TO_IDX[unit_type][f"TRANSFER_{resource}_{direction}"]
+                                ] = False
+                    if unit.is_worker():
+                        # Pillaging - check that worker is on a road tile and not on an allied city tile
+                        if game_state.map.get_cell_by_pos(unit.pos).road <= 0 or \
+                                pos_to_city_tile_dict[(unit.pos.x, unit.pos.y)] is not None:
+                            available_actions_mask[unit_type][
+                                :,
+                                p_id,
+                                x,
+                                y,
+                                ACTION_MEANINGS_TO_IDX[unit_type]["PILLAGE"]
+                            ] = False
+                        # Building a city - check that worker has >= the required resources and is not on a resource
+                        if not unit.can_build(game_state.map):
+                            available_actions_mask[unit_type][
+                                :,
+                                p_id,
+                                x,
+                                y,
+                                ACTION_MEANINGS_TO_IDX[unit_type]["BUILD_CITY"]
+                            ] = False
+            for city in player.cities.values():
+                for city_tile in city.citytiles:
+                    if city_tile.can_act():
+                        # No-op is always a legal action
+                        # Research is a legal action whenever research_points < max_research
+                        # Building a new unit is only a legal action when n_units < n_city_tiles
+                        x, y = city_tile.pos.x, city_tile.pos.y
+                        if player.research_points >= _MAX_RESEARCH:
+                            available_actions_mask["city_tile"][
+                                :,
+                                p_id,
+                                x,
+                                y,
+                                ACTION_MEANINGS_TO_IDX["city_tile"]["RESEARCH"]
+                            ] = False
+                        if len(player.units) >= player.city_tile_count:
+                            available_actions_mask["city_tile"][
+                                :,
+                                p_id,
+                                x,
+                                y,
+                                ACTION_MEANINGS_TO_IDX["city_tile"]["BUILD_WORKER"]
+                            ] = False
+                            available_actions_mask["city_tile"][
+                                :,
+                                p_id,
+                                x,
+                                y,
+                                ACTION_MEANINGS_TO_IDX["city_tile"]["BUILD_CART"]
+                            ] = False
+        return available_actions_mask
 
 
 def get_unit_action(unit: Unit, action_idx: int, pos_to_unit_dict: dict[tuple, Optional[Unit]]) -> Optional[str]:

@@ -15,14 +15,14 @@ group: attention
 ## ENV params
 act_space: BasicActionSpace
 obs_space: FIXED_SHAPE_CONTINUOUS_OBS
-reward_space: CityTileReward
+reward_space: StatefulMultiReward
 
 ## TRAINING params
 total_steps: 1e8
 num_actors: 2
-n_actor_envs: 2
-unroll_length: 4
-batch_size: 2
+n_actor_envs: 16
+unroll_length: 10
+batch_size: 1
 discounting: 0.9995
 
 ## MODEL params
@@ -34,24 +34,25 @@ use_index_select: True
 # Conv-specific params
 kernel_size: 5
 # Attention-specific params
-mhsa_heads: 4
+mhsa_heads: 2
 
 
 ## OPTIMIZER params
 optimizer_class: RMSprop
 optimizer_kwargs:
-  lr: 2e-4
+  lr: 1e-4
   alpha: 0.9
 min_lr_mod: 0.01
 
 ## LOSS params
-entropy_cost: 0.0002
+entropy_cost: 0.0001
 baseline_cost: 1.
+reduction: sum
 
 # MISCELLANEOUS params
 # load_dir: null
-actor_device: cuda:1
-learner_device: cuda:0
+actor_device: cuda:0
+learner_device: cuda:1
 disable_wandb: False
 model_log_freq: 100
 # file_descriptor or file_system

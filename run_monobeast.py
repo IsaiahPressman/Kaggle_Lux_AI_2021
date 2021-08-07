@@ -31,14 +31,14 @@ def get_default_flags(flags: DictConfig) -> DictConfig:
     flags = OmegaConf.to_container(flags)
     # Env params
     flags.setdefault("seed", 42)
-    flags.setdefault("num_buffers", max(2 * flags["num_actors"], flags["batch_size"] // flags["n_actor_envs"]))
+    flags.setdefault("num_buffers", max(flags["num_actors"], flags["batch_size"] // flags["n_actor_envs"]))
 
     # Training params
     flags.setdefault("use_mixed_precision", True)
-    flags.setdefault("discounting", 0.99)
+    flags.setdefault("discounting", 0.999)
     flags.setdefault("reduction", "mean")
     flags.setdefault("clip_grads", 10.)
-    flags.setdefault("checkpoint_freq", 20.)
+    flags.setdefault("checkpoint_freq", 5.)
     flags.setdefault("num_learner_threads", 1)
 
     # Miscellaneous params
@@ -48,7 +48,7 @@ def get_default_flags(flags: DictConfig) -> DictConfig:
     return OmegaConf.create(flags)
 
 
-@hydra.main(config_path="conf", config_name="attn_config")
+@hydra.main(config_path="conf", config_name="conv_config")
 def main(flags: DictConfig):
     cli_conf = OmegaConf.from_cli()
     if Path("config.yaml").exists():

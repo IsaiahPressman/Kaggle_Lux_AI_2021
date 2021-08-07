@@ -45,7 +45,7 @@ class RLAgent:
         env = LuxEnv(
             act_space=self.flags.act_space,
             obs_space=self.flags.obs_space,
-            reward_space=self.flags.reward_space,
+            reward_space=self.flags.reward_space(),
             run_game_automatically=False
         )
         env = self.flags.obs_space.wrap_env(env)
@@ -68,8 +68,8 @@ class RLAgent:
     def __call__(self, obs, conf) -> List[str]:
         self.preprocess(obs, conf)
         env_output = self.env.step(self.action_placeholder)
-        # agent_output = self.model.select_best_actions(env_output)
-        agent_output = self.model.sample_actions(env_output)
+        agent_output = self.model.select_best_actions(env_output)
+        # agent_output = self.model.sample_actions(env_output)
         actions, _ = self.unwrapped_env.process_actions({
             key: value.squeeze(0).cpu().numpy() for key, value in agent_output["actions"].items()
         })
