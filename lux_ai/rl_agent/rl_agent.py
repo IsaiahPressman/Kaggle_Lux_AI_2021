@@ -64,6 +64,7 @@ class RLAgent:
         self.model = create_model(self.flags, self.device)
         checkpoint_states = torch.load(CHECKPOINT_PATH, map_location=self.device)
         self.model.load_state_dict(checkpoint_states["model_state_dict"])
+        self.model.eval()
 
     def __call__(self, obs, conf) -> List[str]:
         self.preprocess(obs, conf)

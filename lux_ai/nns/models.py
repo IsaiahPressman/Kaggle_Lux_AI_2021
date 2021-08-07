@@ -6,6 +6,7 @@ import torch.nn.functional as F
 from typing import *
 
 from .in_blocks import DictInputLayer
+from ..lux.game_constants import GAME_CONSTANTS
 from ..lux_gym.reward_spaces import RewardSpec
 
 
@@ -92,12 +93,15 @@ class BaselineLayer(nn.Module):
         super(BaselineLayer, self).__init__()
         self.reward_space = reward_space
         self.linear = nn.Linear(in_channels, 1)
-        if self.reward_space.reward_min is None or self.reward_space.reward_max is None:
-            self.activation = nn.Identity()
-        elif self.reward_space.zero_sum:
+        if self.reward_space.zero_sum:
             self.activation = nn.Softmax(dim=-1)
         else:
             self.activation = nn.Sigmoid()
+        if self.reward_space.only_once:
+            self.reward_space_expanded = 1.
+        else:
+            # Expand reward space to n_steps for rewards that occur more than once
+            self.reward_space_expanded = GAME_CONSTANTS["PARAMETERS"]["MAX_DAYS"]
 
     def forward(self, x: torch.Tensor):
         """
@@ -106,15 +110,10 @@ class BaselineLayer(nn.Module):
         """
         # Project and reshape input
         x = self.linear(x).view(-1, 2)
-        if self.reward_space.reward_min is None or self.reward_space.reward_max is None:
-            x = self.activation(x)
-            if self.reward_space.zero_sum:
-                x = x - x.mean(dim=-1, keepdim=True)
-        else:
-            # Rescale to [0, 1], and then to the desired reward space
-            x = self.activation(x)
-            x = x * (self.reward_space.reward_max - self.reward_space.reward_min) + self.reward_space.reward_min
-        return x
+        # Rescale to [0, 1], and then to the desired reward space
+        x = self.activation(x)
+        x = x * (self.reward_space.reward_max - self.reward_space.reward_min) + self.reward_space.reward_min
+        return x * self.reward_space_expanded
 
 
 class BasicActorCriticNetwork(nn.Module):

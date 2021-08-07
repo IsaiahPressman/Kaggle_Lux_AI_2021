@@ -92,9 +92,10 @@ class LuxEnv(gym.Env):
         else:
             self.dimension_process = None
 
-    def reset(self, observation_updates: Optional[list[str]] = None):
+    def reset(self, observation_updates: Optional[list[str]] = None) -> tuple[Game, tuple[float, float], bool, dict]:
         self.game_state = Game()
         if self.run_game_automatically:
+            assert observation_updates is None, "Game is being run automatically"
             # 1.2: Initialize a blank state game if new episode is starting
             self.configuration["seed"] += 1
             initiate = {
@@ -109,8 +110,8 @@ class LuxEnv(gym.Env):
 
             self.game_state._initialize(agent1res)
             self.game_state._update(agent1res[2:])
-            assert observation_updates is None, "Game is being run automatically"
         else:
+            assert observation_updates is not None, "Game is not being run automatically"
             self.game_state._initialize(observation_updates)
             self.game_state._update(observation_updates[2:])
 
@@ -127,29 +128,29 @@ class LuxEnv(gym.Env):
                 for key, space in self.action_space.get_action_space(self.board_dims).spaces.items()
             }
         }
-        self.pos_to_unit_dict = _generate_pos_to_unit_dict(self.game_state)
-        self.pos_to_city_tile_dict = _generate_pos_to_city_tile_dict(self.game_state)
-        self._update_available_actions_mask()
+        self._update_internal_state()
 
-        rewards = self.reward_space.compute_rewards(self.game_state, self.done)
-        return self.obs, rewards, self.done, copy.copy(self.info)
+        return self.get_obs_reward_done_info()
 
-    def step(self, action: dict[str, np.ndarray]):
+    def step(self, action: dict[str, np.ndarray]) -> tuple[Game, tuple[float, float], bool, dict]:
         if self.run_game_automatically:
             actions_processed, actions_taken = self.process_actions(action)
             self._step(actions_processed)
             self.info["actions_taken"] = actions_taken
+        self._update_internal_state()
 
-        self.pos_to_unit_dict = _generate_pos_to_unit_dict(self.game_state)
-        self.pos_to_city_tile_dict = _generate_pos_to_city_tile_dict(self.game_state)
-        self._update_available_actions_mask()
-
-        rewards = self.reward_space.compute_rewards(self.game_state, self.done)
-        return self.obs, rewards, self.done, copy.copy(self.info)
+        return self.get_obs_reward_done_info()
 
     def manual_step(self, observation_updates: list[str]) -> NoReturn:
         assert not self.run_game_automatically
         self.game_state._update(observation_updates)
+
+    def get_obs_reward_done_info(self) -> tuple[Game, tuple[float, float], bool, dict]:
+        rewards, done = self.reward_space.compute_rewards_and_done(self.game_state, self.done)
+        if self.done and not done:
+            raise RuntimeError("Reward space did not return done, but the lux engine is done.")
+        self.done = done
+        return self.game_state, rewards, self.done, copy.copy(self.info)
 
     def process_actions(self, action: dict[str, np.ndarray]) -> tuple[list[list[str]], dict[str, np.ndarray]]:
         return self.action_space.process_actions(
@@ -177,7 +178,9 @@ class LuxEnv(gym.Env):
         match_status = json.loads(self.dimension_process.stdout.readline())
         self.done = match_status["status"] == "finished"
 
-    def _update_available_actions_mask(self) -> NoReturn:
+    def _update_internal_state(self) -> NoReturn:
+        self.pos_to_unit_dict = _generate_pos_to_unit_dict(self.game_state)
+        self.pos_to_city_tile_dict = _generate_pos_to_city_tile_dict(self.game_state)
         self.info["available_actions_mask"] = self.action_space.get_available_actions_mask(
             self.game_state,
             self.board_dims,
@@ -197,7 +200,3 @@ class LuxEnv(gym.Env):
 
     def render(self, mode='human'):
         raise NotImplementedError('LuxEnv rendering is not implemented. Use the Lux visualizer instead.')
-
-    @property
-    def obs(self) -> Game:
-        return self.game_state
