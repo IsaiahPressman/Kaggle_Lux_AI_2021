@@ -1,13 +1,15 @@
-import itertools
-from enum import Enum, auto
+from abc import ABC, abstractmethod
 import gym
+import itertools
 import numpy as np
+from typing import Optional
 
-from ..lux.game import Game
+from . import reward_spaces
 from ..lux.constants import Constants
+from ..lux.game import Game
 from ..lux.game_constants import GAME_CONSTANTS
 
-MAX_BOARD_SIZE = (32, 32)
+# TODO: Verify max resources on launch
 MAX_RESOURCE = {
     # https://github.com/Lux-AI-Challenge/Lux-Design-2021/blob/master/src/Game/gen.ts#L227
     Constants.RESOURCE_TYPES.WOOD: 400.,
@@ -16,9 +18,8 @@ MAX_RESOURCE = {
     # https://github.com/Lux-AI-Challenge/Lux-Design-2021/blob/master/src/Game/gen.ts#L269
     Constants.RESOURCE_TYPES.URANIUM: 600.
 }
-
 # TODO: Fix max fuel amount
-MAX_FUEL = 1000.
+MAX_FUEL = 5000.
 UNIT_ENCODING = {
     Constants.UNIT_TYPES.WORKER: 0,
     Constants.UNIT_TYPES.CART: 1,
@@ -30,84 +31,120 @@ RESOURCE_ENCODING = {
     Constants.RESOURCE_TYPES.URANIUM: 2,
     None: 3
 }
+MAX_BOARD_SIZE = (32, 32)
+ALL_SUBTASKS = []
+for rspace in reward_spaces.__dict__.values():
+    if issubclass(rspace, reward_spaces.Subtask) and rspace is not reward_spaces.Subtask:
+        ALL_SUBTASKS.append(rspace)
+ALL_SUBTASKS.append(None)
+SUBTASK_ENCODING = {
+    task: i for i, task in enumerate(ALL_SUBTASKS)
+}
 
 
-# TODO: Refactor ObsSpace to use inheritance like ActSpace does?
-class ObsSpace(Enum):
-    """
-    An enum of all available obs_spaces
-    WARNING: enum order is subject to change
-    """
-    FIXED_SHAPE_CONTINUOUS_OBS = auto()
-    VARIABLE_SHAPE_EMBEDDING_OBS = auto()
+class BaseObsSpace(ABC):
+    def __init__(self, include_subtask_embedding: bool = False, override_n_subtasks: Optional[int] = None):
+        self.include_subtask_embedding = include_subtask_embedding
+        if override_n_subtasks:
+            self.n_subtasks = override_n_subtasks
+        else:
+            self.n_subtasks = len(SUBTASK_ENCODING)
 
     # NB: Avoid using Discrete() space, as it returns a shape of ()
     # NB: "_COUNT" keys indicate that the value is used to scale the embedding of another value
-    def get_obs_spec(self, board_dims: tuple[int, int] = MAX_BOARD_SIZE) -> gym.spaces.Dict:
+    @abstractmethod
+    def get_obs_spec(
+            self,
+            board_dims: tuple[int, int] = MAX_BOARD_SIZE
+    ) -> gym.spaces.Dict:
+        if self.include_subtask_embedding:
+            return self.get_subtask_embedding(board_dims)
+        else:
+            return gym.spaces.Dict({})
+
+    @abstractmethod
+    def get_subtask_embedding(self, board_dims: tuple[int, int] = MAX_BOARD_SIZE) -> gym.spaces.Dict:
+        pass
+
+    @abstractmethod
+    def wrap_env(self, env) -> gym.Wrapper:
+        pass
+
+
+class FixedShapeContinuousObs(BaseObsSpace):
+    def get_obs_spec(
+            self,
+            board_dims: tuple[int, int] = MAX_BOARD_SIZE,
+            include_subtask_embedding: bool = False
+    ) -> gym.spaces.Dict:
+        subtask_embedding = super(FixedShapeContinuousObs, self).get_obs_spec(board_dims)
         x = board_dims[0]
         y = board_dims[1]
         # Player count
         p = 2
-        if self == ObsSpace.FIXED_SHAPE_CONTINUOUS_OBS:
-            return gym.spaces.Dict({
-                # Player specific observations
-                # none, worker
-                "worker": gym.spaces.MultiBinary((1, p, x, y)),
-                # none, cart
-                "cart": gym.spaces.MultiBinary((1, p, x, y)),
-                # Number of units in the square (only relevant on city tiles)
-                "worker_COUNT": gym.spaces.Box(0., float("inf"), shape=(1, p, x, y)),
-                "cart_COUNT": gym.spaces.Box(0., float("inf"), shape=(1, p, x, y)),
-                # NB: cooldowns and cargo are always zero when on city tiles, so one layer will do for
-                # the entire map
-                # Normalized from 0-3
-                "worker_cooldown": gym.spaces.Box(0., 1., shape=(1, p, x, y)),
-                # Normalized from 0-5
-                "cart_cooldown": gym.spaces.Box(0., 1., shape=(1, p, x, y)),
-                # Normalized from 0-100
-                "worker_cargo": gym.spaces.Box(0., 1., shape=(3, p, x, y)),
-                # Normalized from 0-2000
-                "cart_cargo": gym.spaces.Box(0., 1., shape=(3, p, x, y)),
-                # none, city_tile
-                "city_tile": gym.spaces.MultiBinary((1, p, x, y)),
-                # Normalized from 0-MAX_FUEL
-                "city_tile_fuel": gym.spaces.Box(0., 1., shape=(1, p, x, y)),
-                # Normalized from 0-30
-                "city_tile_cost": gym.spaces.Box(0., 1., shape=(1, p, x, y)),
-                # Normalized from 0-9
-                "city_tile_cooldown": gym.spaces.Box(0., 1., shape=(1, p, x, y)),
+        return gym.spaces.Dict({
+            # Player specific observations
+            # none, worker
+            "worker": gym.spaces.MultiBinary((1, p, x, y)),
+            # none, cart
+            "cart": gym.spaces.MultiBinary((1, p, x, y)),
+            # Number of units in the square (only relevant on city tiles)
+            "worker_COUNT": gym.spaces.Box(0., float("inf"), shape=(1, p, x, y)),
+            "cart_COUNT": gym.spaces.Box(0., float("inf"), shape=(1, p, x, y)),
+            # NB: cooldowns and cargo are always zero when on city tiles, so one layer will do for
+            # the entire map
+            # Normalized from 0-3
+            "worker_cooldown": gym.spaces.Box(0., 1., shape=(1, p, x, y)),
+            # Normalized from 0-5
+            "cart_cooldown": gym.spaces.Box(0., 1., shape=(1, p, x, y)),
+            # Normalized from 0-100
+            "worker_cargo": gym.spaces.Box(0., 1., shape=(3, p, x, y)),
+            # Normalized from 0-2000
+            "cart_cargo": gym.spaces.Box(0., 1., shape=(3, p, x, y)),
+            # none, city_tile
+            "city_tile": gym.spaces.MultiBinary((1, p, x, y)),
+            # Normalized from 0-MAX_FUEL
+            "city_tile_fuel": gym.spaces.Box(0., 1., shape=(1, p, x, y)),
+            # Normalized from 0-30
+            "city_tile_cost": gym.spaces.Box(0., 1., shape=(1, p, x, y)),
+            # Normalized from 0-9
+            "city_tile_cooldown": gym.spaces.Box(0., 1., shape=(1, p, x, y)),
 
-                # Player-agnostic observations
-                # Normalized from 0-6
-                "road_level": gym.spaces.Box(0., 1., shape=(1, 1, x, y)),
-                # Wood, coal, uranium
-                "resources": gym.spaces.Box(0., 1., shape=(3, 1, x, y)),
+            # Player-agnostic observations
+            # Normalized from 0-6
+            "road_level": gym.spaces.Box(0., 1., shape=(1, 1, x, y)),
+            # Wood, coal, uranium
+            "resources": gym.spaces.Box(0., 1., shape=(3, 1, x, y)),
 
-                # Non-spatial observations
-                # Normalized from 0-200
-                "research_points": gym.spaces.Box(0., 1., shape=(1, p)),
-                # coal is researched
-                "researched_coal": gym.spaces.MultiBinary((1, p)),
-                # uranium is researched
-                "researched_uranium": gym.spaces.MultiBinary((1, p)),
-                # True when it is night
-                "night": gym.spaces.MultiBinary((1, 1)),
-                # The turn number, normalized from 0-360
-                "turn": gym.spaces.Box(0., 1., shape=(1, 1))
-            })
-        else:
-            raise NotImplementedError(f'ObsSpace not yet implemented: {self.name}')
+            # Non-spatial observations
+            # Normalized from 0-200
+            "research_points": gym.spaces.Box(0., 1., shape=(1, p)),
+            # coal is researched
+            "researched_coal": gym.spaces.MultiBinary((1, p)),
+            # uranium is researched
+            "researched_uranium": gym.spaces.MultiBinary((1, p)),
+            # True when it is night
+            "night": gym.spaces.MultiBinary((1, 1)),
+            # The turn number, normalized from 0-360
+            "turn": gym.spaces.Box(0., 1., shape=(1, 1)),
+            **subtask_embedding.spaces
+        })
+
+    def get_subtask_embedding(self, board_dims: tuple[int, int] = MAX_BOARD_SIZE) -> gym.spaces.Dict:
+        x = board_dims[0]
+        y = board_dims[1]
+        return gym.spaces.Dict({
+            "subtask": gym.spaces.MultiDiscrete(np.zeros((1, 1, x, y), dtype=int) + self.n_subtasks)
+        })
 
     def wrap_env(self, env) -> gym.Wrapper:
-        if self == ObsSpace.FIXED_SHAPE_CONTINUOUS_OBS:
-            return _FixedShapeContinuousObs(env)
-        else:
-            raise NotImplementedError(f'ObsSpace not yet implemented: {self.name}')
+        return _FixedShapeContinuousObsWrapper(env, self.include_subtask_embedding)
 
 
-class _FixedShapeContinuousObs(gym.Wrapper):
-    def __init__(self, env: gym.Env):
-        super(_FixedShapeContinuousObs, self).__init__(env)
+class _FixedShapeContinuousObsWrapper(gym.Wrapper):
+    def __init__(self, env: gym.Env, include_subtask_embedding: bool):
+        super(_FixedShapeContinuousObsWrapper, self).__init__(env)
+        self.include_subtask_embedding = include_subtask_embedding
         self._empty_obs = {}
         for key, spec in self.observation_space.spaces.items():
             if isinstance(spec, gym.spaces.MultiBinary):
@@ -149,16 +186,16 @@ class _FixedShapeContinuousObs(gym.Wrapper):
             for unit in player.units:
                 x, y = unit.pos.x, unit.pos.y
                 if unit.is_worker():
-                    obs["worker"][0, p_id, x, y] = 1.
-                    obs["worker_COUNT"][0, p_id, x, y] += 1.
+                    obs["worker"][0, p_id, x, y] = 1
+                    obs["worker_COUNT"][0, p_id, x, y] += 1
                     obs["worker_cooldown"][0, p_id, x, y] = unit.cooldown / w_cooldown
 
                     obs["worker_cargo"][wood_idx, p_id, x, y] = unit.cargo.wood / w_capacity
                     obs["worker_cargo"][coal_idx, p_id, x, y] = unit.cargo.coal / w_capacity
                     obs["worker_cargo"][uranium_idx, p_id, x, y] = unit.cargo.uranium / w_capacity
                 elif unit.is_cart():
-                    obs["cart"][0, p_id, x, y] = 1.
-                    obs["cart_COUNT"][0, p_id, x, y] += 1.
+                    obs["cart"][0, p_id, x, y] = 1
+                    obs["cart_COUNT"][0, p_id, x, y] += 1
                     obs["cart_cooldown"][0, p_id, x, y] = unit.cooldown / ca_cooldown
 
                     obs["cart_cargo"][wood_idx, p_id, x, y] = unit.cargo.wood / ca_capacity
@@ -172,7 +209,7 @@ class _FixedShapeContinuousObs(gym.Wrapper):
                 city_light_normalized = city.light_upkeep / ci_light / len(city.citytiles)
                 for city_tile in city.citytiles:
                     x, y = city_tile.pos.x, city_tile.pos.y
-                    obs["city_tile"][0, p_id, x, y] = 1.
+                    obs["city_tile"][0, p_id, x, y] = 1
                     obs["city_tile_fuel"][0, p_id, x, y] = city_fuel_normalized
                     # NB: This doesn't technically register the light upkeep of a given city tile, but instead
                     # the average light cost of every tile in the given city
@@ -192,5 +229,9 @@ class _FixedShapeContinuousObs(gym.Wrapper):
         dn_cycle_len = GAME_CONSTANTS["PARAMETERS"]["DAY_LENGTH"] + GAME_CONSTANTS["PARAMETERS"]["NIGHT_LENGTH"]
         obs["night"][0, 0] = (observation.turn - 1) % dn_cycle_len >= GAME_CONSTANTS["PARAMETERS"]["DAY_LENGTH"]
         obs["turn"][0, 0] = observation.turn / GAME_CONSTANTS["PARAMETERS"]["MAX_DAYS"]
+
+        if self.include_subtask_embedding:
+            subtask = type(self.unwrapped.reward_space)
+            obs["subtask"][:] = SUBTASK_ENCODING[subtask]
 
         return obs
