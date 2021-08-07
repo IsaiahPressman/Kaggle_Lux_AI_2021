@@ -15,21 +15,21 @@ group: conv
 ## ENV params
 act_space: BasicActionSpace
 obs_space: FIXED_SHAPE_CONTINUOUS_OBS
-reward_space: CityTileReward
+reward_space: StatefulMultiReward
 
 ## TRAINING params
 total_steps: 1e8
 num_actors: 2
 n_actor_envs: 16
-unroll_length: 5
-batch_size: 16
+unroll_length: 10
+batch_size: 4
 discounting: 0.9995
 
 ## MODEL params
 model_arch: conv_model
-n_blocks: 8
+n_blocks: 4
 hidden_dim: 128
-normalize: True
+normalize: False
 use_index_select: True
 # Conv-specific params
 kernel_size: 5
@@ -45,8 +45,9 @@ optimizer_kwargs:
 min_lr_mod: 0.01
 
 ## LOSS params
-entropy_cost: 0.0002
+entropy_cost: 0.0001
 baseline_cost: 1.
+reduction: sum
 
 # MISCELLANEOUS params
 # load_dir: null

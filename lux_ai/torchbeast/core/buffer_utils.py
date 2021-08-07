@@ -15,14 +15,45 @@ def fill_buffers_inplace(buffers: Union[dict, torch.Tensor], fill_vals: Union[di
         buffers[step, ...] = fill_vals
 
 
-def stack_buffers(buffers: Buffers) -> dict[str, Union[dict, torch.Tensor]]:
+def stack_buffers(buffers: Buffers, dim: int) -> dict[str, Union[dict, torch.Tensor]]:
     stacked_buffers = {}
     for key, val in buffers[0].items():
         if isinstance(val, dict):
-            stacked_buffers[key] = stack_buffers([b[key] for b in buffers])
+            stacked_buffers[key] = stack_buffers([b[key] for b in buffers], dim)
         else:
-            stacked_buffers[key] = torch.cat([b[key] for b in buffers], dim=1)
+            stacked_buffers[key] = torch.cat([b[key] for b in buffers], dim=dim)
     return stacked_buffers
+
+
+def split_buffers(
+        buffers: dict[str, Union[dict, torch.Tensor]],
+        split_size_or_sections: Union[int, list[int]],
+        dim: int,
+        contiguous: bool,
+) -> list[Union[dict, torch.Tensor]]:
+    buffers_split = None
+    for key, val in buffers.items():
+        if isinstance(val, dict):
+            bufs = split_buffers(val, split_size_or_sections, dim, contiguous)
+        else:
+            bufs = torch.split(val, split_size_or_sections, dim=dim)
+            if contiguous:
+                bufs = [b.contiguous() for b in bufs]
+
+        if buffers_split is None:
+            buffers_split = [{} for _ in range(len(bufs))]
+        assert len(bufs) == len(buffers_split)
+        buffers_split = [dict(**{key: buf}, **d) for buf, d in zip(bufs, buffers_split)]
+    return buffers_split
+
+
+def buffers_apply(buffers: Union[dict, torch.Tensor], func: Callable[[torch.Tensor], Any]) -> Union[dict, torch.Tensor]:
+    if isinstance(buffers, dict):
+        return {
+            key: buffers_apply(val, func) for key, val in buffers.items()
+        }
+    else:
+        return func(buffers)
 
 
 def _create_buffers_from_specs(specs: dict[str, Union[dict, tuple, torch.dtype]]) -> Union[dict, torch.Tensor]:
@@ -82,12 +113,3 @@ def create_buffers(flags, example_info: dict[str, Union[dict, np.ndarray, torch.
         new_buffer["info"] = _create_buffers_like(example_info, t + 1)
         buffers.append(new_buffer)
     return buffers
-
-
-def buffers_apply(buffers: Union[dict, torch.Tensor], func: Callable[[torch.Tensor], Any]) -> Union[dict, torch.Tensor]:
-    if isinstance(buffers, dict):
-        return {
-            key: buffers_apply(val, func) for key, val in buffers.items()
-        }
-    else:
-        return func(buffers)

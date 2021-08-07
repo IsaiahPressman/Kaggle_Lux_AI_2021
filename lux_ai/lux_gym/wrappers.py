@@ -72,6 +72,7 @@ class LoggingEnv(gym.Wrapper):
         self.reward_sums = [0., 0.]
         # TODO: Resource mining % like in visualizer?
         # self.resource_count = {"wood", etc...}
+        # TODO: Fuel metric?
 
     def info(self, info: dict[str, np.ndarray], rewards: list[int]) -> dict[str, np.ndarray]:
         info = copy.copy(info)

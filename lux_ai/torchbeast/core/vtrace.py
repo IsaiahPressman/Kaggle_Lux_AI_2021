@@ -56,20 +56,42 @@ def action_log_probs(policy_logits, actions):
 
 
 def from_logits(
-    behavior_policy_logits,
-    target_policy_logits,
-    actions,
-    discounts,
-    rewards,
-    values,
-    bootstrap_value,
-    clip_rho_threshold=1.0,
-    clip_pg_rho_threshold=1.0,
+        behavior_policy_logits,
+        target_policy_logits,
+        actions,
+        discounts,
+        rewards,
+        values,
+        bootstrap_value,
+        clip_rho_threshold=1.0,
+        clip_pg_rho_threshold=1.0,
 ):
     """V-trace for softmax policies."""
 
     target_action_log_probs = action_log_probs(target_policy_logits, actions)
     behavior_action_log_probs = action_log_probs(behavior_policy_logits, actions)
+    return from_action_log_probs(
+        behavior_action_log_probs=behavior_action_log_probs,
+        target_action_log_probs=target_action_log_probs,
+        discounts=discounts,
+        rewards=rewards,
+        values=values,
+        bootstrap_value=bootstrap_value,
+        clip_rho_threshold=clip_rho_threshold,
+        clip_pg_rho_threshold=clip_pg_rho_threshold
+    )
+
+
+def from_action_log_probs(
+        behavior_action_log_probs,
+        target_action_log_probs,
+        discounts,
+        rewards,
+        values,
+        bootstrap_value,
+        clip_rho_threshold=1.0,
+        clip_pg_rho_threshold=1.0,
+):
     log_rhos = target_action_log_probs - behavior_action_log_probs
     vtrace_returns = from_importance_weights(
         log_rhos=log_rhos,
@@ -90,13 +112,13 @@ def from_logits(
 
 @torch.no_grad()
 def from_importance_weights(
-    log_rhos,
-    discounts,
-    rewards,
-    values,
-    bootstrap_value,
-    clip_rho_threshold=1.0,
-    clip_pg_rho_threshold=1.0,
+        log_rhos,
+        discounts,
+        rewards,
+        values,
+        bootstrap_value,
+        clip_rho_threshold=1.0,
+        clip_pg_rho_threshold=1.0,
 ):
     """V-trace from log importance weights."""
     with torch.no_grad():

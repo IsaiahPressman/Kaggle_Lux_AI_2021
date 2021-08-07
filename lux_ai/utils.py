@@ -11,8 +11,8 @@ def flags_to_namespace(flags: dict) -> SimpleNamespace:
     flags.act_space = act_spaces.__dict__[flags.act_space]()
     assert isinstance(flags.act_space, act_spaces.BaseActSpace), f"{flags.act_space}"
     flags.obs_space = obs_spaces.ObsSpace[flags.obs_space]
-    flags.reward_space = reward_spaces.__dict__[flags.reward_space]()
-    assert isinstance(flags.reward_space, reward_spaces.BaseRewardSpace), f"{flags.reward_space}"
+    flags.reward_space = reward_spaces.__dict__[flags.reward_space]
+    assert isinstance(flags.reward_space(), reward_spaces.BaseRewardSpace), f"{flags.reward_space}"
 
     # Optimizer params
     flags.optimizer_class = torch.optim.__dict__[flags.optimizer_class]

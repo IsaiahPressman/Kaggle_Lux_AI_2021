@@ -51,7 +51,7 @@ class DictActor(nn.Module):
     ) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
         """
         Expects an input of shape batch_size * 2, n_channels, h, w
-        This input will be projected by the actors, and then converted to shape batch_size, 2, n_channels, h, w
+        This input will be projected by the actors, and then converted to shape batch_size, n_channels, 2, h, w
         """
         policy_logits_out = {}
         actions_out = {}
@@ -90,13 +90,14 @@ class DictActor(nn.Module):
 class BaselineLayer(nn.Module):
     def __init__(self, in_channels: int, reward_space: RewardSpec):
         super(BaselineLayer, self).__init__()
+        self.reward_space = reward_space
         self.linear = nn.Linear(in_channels, 1)
-        if reward_space.zero_sum:
+        if self.reward_space.reward_min is None or self.reward_space.reward_max is None:
+            self.activation = nn.Identity()
+        elif self.reward_space.zero_sum:
             self.activation = nn.Softmax(dim=-1)
         else:
             self.activation = nn.Sigmoid()
-        self.reward_min = reward_space.reward_min
-        self.reward_max = reward_space.reward_max
 
     def forward(self, x: torch.Tensor):
         """
@@ -105,9 +106,15 @@ class BaselineLayer(nn.Module):
         """
         # Project and reshape input
         x = self.linear(x).view(-1, 2)
-        # Rescale to [0, 1], and then to the desired reward space
-        x = self.activation(x)
-        return x * (self.reward_max - self.reward_min) + self.reward_min
+        if self.reward_space.reward_min is None or self.reward_space.reward_max is None:
+            x = self.activation(x)
+            if self.reward_space.zero_sum:
+                x = x - x.mean(dim=-1, keepdim=True)
+        else:
+            # Rescale to [0, 1], and then to the desired reward space
+            x = self.activation(x)
+            x = x * (self.reward_space.reward_max - self.reward_space.reward_min) + self.reward_space.reward_min
+        return x
 
 
 class BasicActorCriticNetwork(nn.Module):
