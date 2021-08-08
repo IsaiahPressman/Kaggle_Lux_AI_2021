@@ -82,7 +82,7 @@ def create_buffers(flags, example_info: dict[str, Union[dict, np.ndarray, torch.
     n = flags.n_actor_envs
     p = 2
     obs_specs = {}
-    for key, spec in flags.obs_space.get_obs_spec().spaces.items():
+    for key, spec in flags.obs_space().get_obs_spec().spaces.items():
         if isinstance(spec, gym.spaces.MultiBinary):
             dtype = torch.int64
         elif isinstance(spec, gym.spaces.MultiDiscrete):
@@ -99,12 +99,12 @@ def create_buffers(flags, example_info: dict[str, Union[dict, np.ndarray, torch.
         done=dict(size=(t + 1, n), dtype=torch.bool),
         policy_logits={
             key: dict(size=(t + 1, n, *val), dtype=torch.float32)
-            for key, val in flags.act_space.get_action_space_expanded_shape().items()
+            for key, val in flags.act_space().get_action_space_expanded_shape().items()
         },
         baseline=dict(size=(t + 1, n, p), dtype=torch.float32),
         actions={
             key: dict(size=(t + 1, n, *val.shape), dtype=torch.int64)
-            for key, val in flags.act_space.get_action_space().spaces.items()
+            for key, val in flags.act_space().get_action_space().spaces.items()
         },
     )
     buffers: Buffers = []

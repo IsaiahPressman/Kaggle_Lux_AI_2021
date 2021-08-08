@@ -9,10 +9,12 @@ from .conv_blocks import FullConvResidualBlock
 
 
 def create_model(flags, device: torch.device) -> nn.Module:
+    obs_space = flags.obs_space()
+    act_space = flags.act_space()
     if flags.model_arch == "dummy_conv_model":
         base_model = nn.Sequential(
             ConvEmbeddingInputLayer(
-                obs_space=flags.obs_space.get_obs_spec(),
+                obs_space=obs_space.get_obs_spec(),
                 embedding_dim=flags.hidden_dim,
                 use_index_select=flags.use_index_select
             ),
@@ -36,14 +38,14 @@ def create_model(flags, device: torch.device) -> nn.Module:
         model = BasicActorCriticNetwork(
             base_model=base_model,
             base_out_channels=flags.hidden_dim,
-            action_space=flags.act_space.get_action_space(),
+            action_space=act_space.get_action_space(),
             reward_space=flags.reward_space.get_reward_spec(),
         )
 
     elif flags.model_arch == "dummy_attention_model":
         base_model = nn.Sequential(
             ConvEmbeddingInputLayer(
-                obs_space=flags.obs_space.get_obs_spec(),
+                obs_space=obs_space.get_obs_spec(),
                 embedding_dim=flags.hidden_dim,
                 use_index_select=flags.use_index_select
             ),
@@ -67,14 +69,14 @@ def create_model(flags, device: torch.device) -> nn.Module:
         model = BasicActorCriticNetwork(
             base_model=base_model,
             base_out_channels=flags.hidden_dim,
-            action_space=flags.act_space.get_action_space(),
+            action_space=act_space.get_action_space(),
             reward_space=flags.reward_space.get_reward_spec(),
         )
 
     elif flags.model_arch == "conv_model":
         base_model = nn.Sequential(
             ConvEmbeddingInputLayer(
-                obs_space=flags.obs_space.get_obs_spec(),
+                obs_space=obs_space.get_obs_spec(),
                 embedding_dim=flags.hidden_dim,
                 use_index_select=flags.use_index_select
             ),
@@ -90,14 +92,14 @@ def create_model(flags, device: torch.device) -> nn.Module:
         model = BasicActorCriticNetwork(
             base_model=base_model,
             base_out_channels=flags.hidden_dim,
-            action_space=flags.act_space.get_action_space(),
+            action_space=act_space.get_action_space(),
             reward_space=flags.reward_space.get_reward_spec(),
         )
 
     elif flags.model_arch == "attention_model":
         base_model = nn.Sequential(
             ConvEmbeddingInputLayer(
-                obs_space=flags.obs_space.get_obs_spec(),
+                obs_space=obs_space.get_obs_spec(),
                 embedding_dim=flags.hidden_dim,
                 use_index_select=flags.use_index_select
             ),
@@ -113,7 +115,7 @@ def create_model(flags, device: torch.device) -> nn.Module:
         model = BasicActorCriticNetwork(
             base_model=base_model,
             base_out_channels=flags.hidden_dim,
-            action_space=flags.act_space.get_action_space(),
+            action_space=act_space.get_action_space(),
             reward_space=flags.reward_space.get_reward_spec(),
         )
     else:

@@ -43,12 +43,12 @@ class RLAgent:
         self.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
         # self.device = torch.device('cpu')
         env = LuxEnv(
-            act_space=self.flags.act_space,
-            obs_space=self.flags.obs_space,
+            act_space=self.flags.act_space(),
+            obs_space=self.flags.obs_space(),
             reward_space=self.flags.reward_space(),
             run_game_automatically=False
         )
-        env = self.flags.obs_space.wrap_env(env)
+        env = env.obs_space.wrap_env(env)
         env = wrappers.PadEnv(env)
         env = wrappers.VecEnv([env])
         env = wrappers.PytorchEnv(env, self.device)
