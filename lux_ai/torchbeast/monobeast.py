@@ -184,7 +184,7 @@ def act(
                     cached_done = env_output["done"]
                     cached_info_actions_taken = env_output["info"]["actions_taken"]
                     cached_info_logging = {
-                        key: val for key, val in env_output["info"].items() if key.startswith("logging_")
+                        key: val for key, val in env_output["info"].items() if key.startswith("LOGGING_")
                     }
 
                     env_output = env.reset()
@@ -324,7 +324,7 @@ def learn(
             stats = {
                 "Env": {
                     key[8:]: val[batch["done"]].mean().item()
-                    for key, val in batch["info"].items() if key.startswith("logging_")
+                    for key, val in batch["info"].items() if key.startswith("LOGGING_")
                 },
                 "Loss": {
                     "pg_loss": pg_loss.item(),

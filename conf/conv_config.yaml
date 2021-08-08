@@ -15,7 +15,13 @@ group: conv
 ## ENV params
 act_space: BasicActionSpace
 obs_space: FIXED_SHAPE_CONTINUOUS_OBS
-reward_space: StatefulMultiReward
+obs_space_kwargs:
+  include_subtask_encoding: False
+reward_space: MultiSubtask
+reward_space_kwargs:
+  subtasks:
+    - CollectNWood
+  subtask_sampler: RandomSampler
 
 ## TRAINING params
 total_steps: 1e8

@@ -32,6 +32,8 @@ def get_default_flags(flags: DictConfig) -> DictConfig:
     # Env params
     flags.setdefault("seed", 42)
     flags.setdefault("num_buffers", max(flags["num_actors"], flags["batch_size"] // flags["n_actor_envs"]))
+    flags.setdefault("obs_space_kwargs", {})
+    flags.setdefault("reward_space_kwargs", {})
 
     # Training params
     flags.setdefault("use_mixed_precision", True)

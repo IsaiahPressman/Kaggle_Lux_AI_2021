@@ -50,6 +50,9 @@ class BaseRewardSpace(ABC):
     def compute_rewards_and_done(self, game_state: Game, done: bool) -> tuple[tuple[float, float], bool]:
         pass
 
+    def update_info(self, info: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+        return info
+
 
 # Full game reward spaces defined below
 
@@ -190,6 +193,9 @@ class ZeroSumStatefulMultiReward(StatefulMultiReward):
 class Subtask(BaseRewardSpace, ABC):
     @staticmethod
     def get_reward_spec() -> RewardSpec:
+        """
+        Don't override reward_spec or you risk breaking classes like multi_subtask.MultiSubtask
+        """
         return RewardSpec(
             reward_min=0.,
             reward_max=1.,
@@ -204,6 +210,9 @@ class Subtask(BaseRewardSpace, ABC):
     @abstractmethod
     def completed_task(self, game_state: Game) -> np.ndarray:
         pass
+
+    def get_subtask_encoding(self, subtask_encoding: dict) -> int:
+        return subtask_encoding[type(self)]
 
 
 class CollectNWood(Subtask):
@@ -273,27 +282,13 @@ class SurviveNNights(Subtask):
         self.city_count = np.empty((2,), dtype=int)
         self.unit_count = np.empty_like(self.city_count)
 
-    @staticmethod
-    def get_reward_spec() -> RewardSpec:
-        return RewardSpec(
-            reward_min=-1.,
-            reward_max=1.,
-            zero_sum=False,
-            only_once=True
-        )
-
     def compute_rewards_and_done(self, game_state: Game, done: bool) -> tuple[tuple[float, float], bool]:
         failed_task = self.failed_task(game_state)
         completed_task = self.completed_task(game_state)
-        reward = np.where(
-            failed_task,
-            -1.,
-            completed_task.astype(float)
-        )
         done = failed_task.any() or completed_task.any() or done
         if done:
             self._reset()
-        return tuple(reward), done
+        return tuple(completed_task.astype(float)), done
 
     def completed_task(self, game_state: Game) -> np.ndarray:
         return np.array([

@@ -13,9 +13,9 @@ from typing import NoReturn, Optional
 
 from ..lux.game import Game
 from ..lux.game_objects import Unit, CityTile
-from ..lux_gym.act_spaces import BaseActSpace, ACTION_MEANINGS, ACTION_MEANINGS_TO_IDX, DIRECTIONS, RESOURCES
-from ..lux_gym.obs_spaces import ObsSpace, MAX_BOARD_SIZE
-from ..lux_gym.reward_spaces import BaseRewardSpace
+from ..lux_gym.act_spaces import BaseActSpace, ACTION_MEANINGS
+from ..lux_gym.obs_spaces import BaseObsSpace, MAX_BOARD_SIZE
+from ..lux_gym.reward_spaces import GameResultReward
 
 
 DIR_PATH = Path(__file__).parent.parent
@@ -53,8 +53,7 @@ class LuxEnv(gym.Env):
     def __init__(
             self,
             act_space: BaseActSpace,
-            obs_space: ObsSpace,
-            reward_space: BaseRewardSpace,
+            obs_space: BaseObsSpace,
             configuration: Optional[dict[str, any]] = None,
             seed: Optional[int] = None,
             run_game_automatically: bool = True,
@@ -62,7 +61,7 @@ class LuxEnv(gym.Env):
         super(LuxEnv, self).__init__()
         self.obs_space = obs_space
         self.action_space = act_space
-        self.reward_space = reward_space
+        self.default_reward_space = GameResultReward()
         self.observation_space = self.obs_space.get_obs_spec()
         self.board_dims = MAX_BOARD_SIZE
         self.run_game_automatically = run_game_automatically
@@ -146,10 +145,7 @@ class LuxEnv(gym.Env):
         self.game_state._update(observation_updates)
 
     def get_obs_reward_done_info(self) -> tuple[Game, tuple[float, float], bool, dict]:
-        rewards, done = self.reward_space.compute_rewards_and_done(self.game_state, self.done)
-        if self.done and not done:
-            raise RuntimeError("Reward space did not return done, but the lux engine is done.")
-        self.done = done
+        rewards = self.default_reward_space.compute_rewards(game_state=self.game_state, done=self.done)
         return self.game_state, rewards, self.done, copy.copy(self.info)
 
     def process_actions(self, action: dict[str, np.ndarray]) -> tuple[list[list[str]], dict[str, np.ndarray]]:
