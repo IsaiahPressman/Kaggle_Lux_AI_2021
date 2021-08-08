@@ -43,8 +43,8 @@ SUBTASK_ENCODING = {
 
 
 class BaseObsSpace(ABC):
-    def __init__(self, include_subtask_embedding: bool = False, override_n_subtasks: Optional[int] = None):
-        self.include_subtask_embedding = include_subtask_embedding
+    def __init__(self, include_subtask_encoding: bool = False, override_n_subtasks: Optional[int] = None):
+        self.include_subtask_encoding = include_subtask_encoding
         if override_n_subtasks:
             self.n_subtasks = override_n_subtasks
         else:
@@ -57,13 +57,13 @@ class BaseObsSpace(ABC):
             self,
             board_dims: tuple[int, int] = MAX_BOARD_SIZE
     ) -> gym.spaces.Dict:
-        if self.include_subtask_embedding:
-            return self.get_subtask_embedding(board_dims)
+        if self.include_subtask_encoding:
+            return self.get_subtask_encoding(board_dims)
         else:
             return gym.spaces.Dict({})
 
     @abstractmethod
-    def get_subtask_embedding(self, board_dims: tuple[int, int] = MAX_BOARD_SIZE) -> gym.spaces.Dict:
+    def get_subtask_encoding(self, board_dims: tuple[int, int] = MAX_BOARD_SIZE) -> gym.spaces.Dict:
         pass
 
     @abstractmethod
@@ -74,10 +74,9 @@ class BaseObsSpace(ABC):
 class FixedShapeContinuousObs(BaseObsSpace):
     def get_obs_spec(
             self,
-            board_dims: tuple[int, int] = MAX_BOARD_SIZE,
-            include_subtask_embedding: bool = False
+            board_dims: tuple[int, int] = MAX_BOARD_SIZE
     ) -> gym.spaces.Dict:
-        subtask_embedding = super(FixedShapeContinuousObs, self).get_obs_spec(board_dims)
+        subtask_encoding = super(FixedShapeContinuousObs, self).get_obs_spec(board_dims)
         x = board_dims[0]
         y = board_dims[1]
         # Player count
@@ -127,10 +126,10 @@ class FixedShapeContinuousObs(BaseObsSpace):
             "night": gym.spaces.MultiBinary((1, 1)),
             # The turn number, normalized from 0-360
             "turn": gym.spaces.Box(0., 1., shape=(1, 1)),
-            **subtask_embedding.spaces
+            **subtask_encoding.spaces
         })
 
-    def get_subtask_embedding(self, board_dims: tuple[int, int] = MAX_BOARD_SIZE) -> gym.spaces.Dict:
+    def get_subtask_encoding(self, board_dims: tuple[int, int] = MAX_BOARD_SIZE) -> gym.spaces.Dict:
         x = board_dims[0]
         y = board_dims[1]
         return gym.spaces.Dict({
@@ -138,13 +137,13 @@ class FixedShapeContinuousObs(BaseObsSpace):
         })
 
     def wrap_env(self, env) -> gym.Wrapper:
-        return _FixedShapeContinuousObsWrapper(env, self.include_subtask_embedding)
+        return _FixedShapeContinuousObsWrapper(env, self.include_subtask_encoding)
 
 
 class _FixedShapeContinuousObsWrapper(gym.Wrapper):
-    def __init__(self, env: gym.Env, include_subtask_embedding: bool):
+    def __init__(self, env: gym.Env, include_subtask_encoding: bool):
         super(_FixedShapeContinuousObsWrapper, self).__init__(env)
-        self.include_subtask_embedding = include_subtask_embedding
+        self.include_subtask_encoding = include_subtask_encoding
         self._empty_obs = {}
         for key, spec in self.observation_space.spaces.items():
             if isinstance(spec, gym.spaces.MultiBinary):
@@ -230,8 +229,8 @@ class _FixedShapeContinuousObsWrapper(gym.Wrapper):
         obs["night"][0, 0] = (observation.turn - 1) % dn_cycle_len >= GAME_CONSTANTS["PARAMETERS"]["DAY_LENGTH"]
         obs["turn"][0, 0] = observation.turn / GAME_CONSTANTS["PARAMETERS"]["MAX_DAYS"]
 
-        if self.include_subtask_embedding:
-            subtask = type(self.unwrapped.reward_space)
-            obs["subtask"][:] = SUBTASK_ENCODING[subtask]
+        if self.include_subtask_encoding:
+            assert isinstance(self.unwrapped.reward_space, reward_spaces.Subtask)
+            obs["subtask"][:] = self.unwrapped.reward_space.get_subtask_encoding(SUBTASK_ENCODING)
 
         return obs
