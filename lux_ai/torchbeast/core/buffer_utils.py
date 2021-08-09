@@ -82,7 +82,7 @@ def create_buffers(flags, example_info: dict[str, Union[dict, np.ndarray, torch.
     n = flags.n_actor_envs
     p = 2
     obs_specs = {}
-    for key, spec in flags.obs_space().get_obs_spec().spaces.items():
+    for key, spec in flags.obs_space(**flags.obs_space_kwargs).get_obs_spec().spaces.items():
         if isinstance(spec, gym.spaces.MultiBinary):
             dtype = torch.int64
         elif isinstance(spec, gym.spaces.MultiDiscrete):

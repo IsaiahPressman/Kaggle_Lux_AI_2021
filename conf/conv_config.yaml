@@ -16,11 +16,14 @@ group: conv
 act_space: BasicActionSpace
 obs_space: FixedShapeContinuousObs
 obs_space_kwargs:
-  include_subtask_encoding: False
+  include_subtask_encoding: True
 reward_space: MultiSubtask
 reward_space_kwargs:
   subtasks:
     - CollectNWood
+    - MakeNCityTiles
+    - MakeNContiguousCityTiles
+    - CollectNTotalFuel
   subtask_sampler: RandomSampler
 
 ## TRAINING params
