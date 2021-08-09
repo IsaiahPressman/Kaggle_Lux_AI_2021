@@ -14,7 +14,7 @@ group: conv
 
 ## ENV params
 act_space: BasicActionSpace
-obs_space: FIXED_SHAPE_CONTINUOUS_OBS
+obs_space: FixedShapeContinuousObs
 obs_space_kwargs:
   include_subtask_encoding: False
 reward_space: MultiSubtask

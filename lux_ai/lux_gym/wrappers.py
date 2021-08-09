@@ -67,9 +67,31 @@ class PadEnv(gym.Wrapper):
         )
 
 
+class RewardSpaceWrapper(gym.Wrapper):
+    def __init__(self, env: LuxEnv, reward_space: BaseRewardSpace):
+        super(RewardSpaceWrapper, self).__init__(env)
+        self.reward_space = reward_space
+
+    def _get_rewards_and_done(self) -> tuple[tuple[float, float], bool]:
+        rewards, done = self.reward_space.compute_rewards_and_done(self.unwrapped.game_state, self.done)
+        if self.unwrapped.done and not done:
+            raise RuntimeError("Reward space did not return done, but the lux engine is done.")
+        self.unwrapped.done = done
+        return rewards, done
+
+    def reset(self, **kwargs):
+        obs, _, _, info = super(RewardSpaceWrapper, self).reset(**kwargs)
+        return obs, *self._get_rewards_and_done(), info
+
+    def step(self, action):
+        obs, _, _, info = super(RewardSpaceWrapper, self).step(action)
+        return obs, *self._get_rewards_and_done(), info
+
+
 class LoggingEnv(gym.Wrapper):
-    def __init__(self, env: gym.Env):
+    def __init__(self, env: gym.Env, reward_space: BaseRewardSpace):
         super(LoggingEnv, self).__init__(env)
+        self.reward_space = reward_space
         self.vals_peak = {}
         self.reward_sums = [0., 0.]
         # TODO: Resource mining % like in visualizer?
@@ -93,10 +115,12 @@ class LoggingEnv(gym.Wrapper):
         logs.update({f"{key}_peak": val.copy() for key, val in self.vals_peak.items()})
 
         self.reward_sums = [r + s for r, s in zip(rewards, self.reward_sums)]
-        logs["reward_sums"] = [np.mean(self.reward_sums)]
-        logs["reward_sum_magnitudes"] = [np.mean(np.abs(self.reward_sums))]
+        logs["mean_cumulative_rewards"] = [np.mean(self.reward_sums)]
+        logs["mean_cumulative_reward_magnitudes"] = [np.mean(np.abs(self.reward_sums))]
+        logs["max_cumulative_rewards"] = [np.max(self.reward_sums)]
         info.update({f"LOGGING_{key}": np.array(val, dtype=np.float32) for key, val in logs.items()})
-        return info
+        # Add any additional info from the reward space
+        return self.reward_space.update_info(info)
 
     def reset(self, **kwargs):
         obs, reward, done, info = super(LoggingEnv, self).reset(**kwargs)
@@ -118,30 +142,6 @@ class LoggingEnv(gym.Wrapper):
                 "carts",
             ]
         }
-
-
-class RewardSpaceWrapper(gym.Wrapper):
-    def __init__(self, env: LoggingEnv, reward_space: BaseRewardSpace):
-        super(RewardSpaceWrapper, self).__init__(env)
-        self.reward_space = reward_space
-
-    def _get_rewards_and_done(self) -> tuple[tuple[float, float], bool]:
-        rewards, done = self.reward_space.compute_rewards_and_done(self.unwrapped.game_state, self.done)
-        if self.unwrapped.done and not done:
-            raise RuntimeError("Reward space did not return done, but the lux engine is done.")
-        self.unwrapped.done = done
-        return rewards, done
-
-    def _update_info(self, info: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
-        return self.reward_space.update_info(info)
-
-    def reset(self, **kwargs):
-        obs, _, _, info = super(RewardSpaceWrapper, self).reset(**kwargs)
-        return obs, *self._get_rewards_and_done(), self._update_info(info)
-
-    def step(self, action):
-        obs, _, _, info = super(RewardSpaceWrapper, self).step(action)
-        return obs, *self._get_rewards_and_done(), self._update_info(info)
 
 
 class VecEnv(gym.Env):

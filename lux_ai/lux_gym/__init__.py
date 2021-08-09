@@ -6,22 +6,28 @@ from .lux_env import LuxEnv
 from .wrappers import RewardSpaceWrapper, PadEnv, LoggingEnv, VecEnv, PytorchEnv, DictEnv
 
 ACT_SPACES_DICT = {
-    key: val for key, val in act_spaces.__dict__.items() if issubclass(val, act_spaces.BaseActSpace)
+    key: val for key, val in act_spaces.__dict__.items()
+    if isinstance(val, type) and issubclass(val, act_spaces.BaseActSpace)
 }
 OBS_SPACES_DICT = {
-    key: val for key, val in obs_spaces.__dict__.items() if issubclass(val, obs_spaces.BaseObsSpace)
+    key: val for key, val in obs_spaces.__dict__.items()
+    if isinstance(val, type) and issubclass(val, obs_spaces.BaseObsSpace)
 }
 REWARD_SPACES_DICT = {
-    key: val for key, val in reward_spaces.__dict__.items() if issubclass(val, reward_spaces.BaseRewardSpace)
+    key: val for key, val in reward_spaces.__dict__.items()
+    if isinstance(val, type) and issubclass(val, reward_spaces.BaseRewardSpace)
 }
 REWARD_SPACES_DICT.update({
-    key: val for key, val in multi_subtask.__dict__.items() if issubclass(val, reward_spaces.BaseRewardSpace)
+    key: val for key, val in multi_subtask.__dict__.items()
+    if isinstance(val, type) and issubclass(val, reward_spaces.BaseRewardSpace)
 })
 SUBTASKS_DICT = {
-    key: val for key, val in multi_subtask.__dict__.items() if issubclass(val, reward_spaces.Subtask)
+    key: val for key, val in reward_spaces.__dict__.items()
+    if isinstance(val, type) and issubclass(val, reward_spaces.Subtask)
 }
 SUBTASK_SAMPLERS_DICT = {
-    key: val for key, val in reward_spaces.__dict__.items() if issubclass(val, multi_subtask.SubtaskSampler)
+    key: val for key, val in multi_subtask.__dict__.items()
+    if isinstance(val, type) and issubclass(val, multi_subtask.SubtaskSampler)
 }
 
 
@@ -35,10 +41,11 @@ def create_env(flags, device: torch.device, seed: Optional[int] = None) -> DictE
             obs_space=flags.obs_space(**flags.obs_space_kwargs),
             seed=seed
         )
+        reward_space = create_reward_space(flags)
+        env = RewardSpaceWrapper(env, reward_space)
         env = env.obs_space.wrap_env(env)
         env = PadEnv(env)
-        env = LoggingEnv(env)
-        env = RewardSpaceWrapper(env, flags.reward_space)
+        env = LoggingEnv(env, reward_space)
         envs.append(env)
     env = VecEnv(envs)
     env = PytorchEnv(env, device)

@@ -34,7 +34,7 @@ RESOURCE_ENCODING = {
 MAX_BOARD_SIZE = (32, 32)
 ALL_SUBTASKS = []
 for rspace in reward_spaces.__dict__.values():
-    if issubclass(rspace, reward_spaces.Subtask) and rspace is not reward_spaces.Subtask:
+    if isinstance(rspace, type) and issubclass(rspace, reward_spaces.Subtask) and rspace is not reward_spaces.Subtask:
         ALL_SUBTASKS.append(rspace)
 ALL_SUBTASKS.append(None)
 SUBTASK_ENCODING = {
