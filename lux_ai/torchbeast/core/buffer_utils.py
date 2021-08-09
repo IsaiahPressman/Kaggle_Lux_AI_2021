@@ -1,3 +1,4 @@
+import copy
 import gym
 import numpy as np
 import torch
@@ -9,15 +10,14 @@ Buffers = list[dict[str, Union[dict, torch.Tensor]]]
 def fill_buffers_inplace(buffers: Union[dict, torch.Tensor], fill_vals: Union[dict, torch.Tensor], step: int):
     if isinstance(fill_vals, dict):
         for key, val in fill_vals.items():
-            assert key in buffers.keys()
             fill_buffers_inplace(buffers[key], val, step)
     else:
-        buffers[step, ...] = fill_vals
+        buffers[step, ...] = fill_vals[:]
 
 
 def stack_buffers(buffers: Buffers, dim: int) -> dict[str, Union[dict, torch.Tensor]]:
     stacked_buffers = {}
-    for key, val in buffers[0].items():
+    for key, val in copy.copy(buffers[0]).items():
         if isinstance(val, dict):
             stacked_buffers[key] = stack_buffers([b[key] for b in buffers], dim)
         else:
