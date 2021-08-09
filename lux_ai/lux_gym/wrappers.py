@@ -120,7 +120,8 @@ class LoggingEnv(gym.Wrapper):
         logs["max_cumulative_rewards"] = [np.max(self.reward_sums)]
         info.update({f"LOGGING_{key}": np.array(val, dtype=np.float32) for key, val in logs.items()})
         # Add any additional info from the reward space
-        return self.reward_space.update_info(info)
+        info.update(self.reward_space.get_info())
+        return info
 
     def reset(self, **kwargs):
         obs, reward, done, info = super(LoggingEnv, self).reset(**kwargs)

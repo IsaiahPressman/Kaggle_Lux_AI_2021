@@ -323,7 +323,7 @@ def learn(
             last_lr = last_lr[0]
             stats = {
                 "Env": {
-                    key[8:]: val[batch["done"]].mean().item()
+                    key[8:]: val[batch["done"]][~val[batch["done"]].isnan()].mean().item()
                     for key, val in batch["info"].items() if key.startswith("LOGGING_")
                 },
                 "Loss": {

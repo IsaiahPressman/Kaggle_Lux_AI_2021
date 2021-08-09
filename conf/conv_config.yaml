@@ -24,7 +24,8 @@ reward_space_kwargs:
     - MakeNCityTiles
     - MakeNContiguousCityTiles
     - CollectNTotalFuel
-  subtask_sampler: RandomSampler
+    - SurviveNNights
+  subtask_sampler: DifficultySampler
 
 ## TRAINING params
 total_steps: 1e8
