@@ -142,6 +142,7 @@ def acquire_timeout(lock: threading.Lock, timeout: float):
         lock.release()
 
 
+@torch.no_grad()
 def act(
     flags: SimpleNamespace,
     actor_index: int,
@@ -173,8 +174,7 @@ def act(
             for t in range(flags.unroll_length):
                 timings.reset()
 
-                with torch.no_grad():
-                    agent_output = actor_model(env_output)
+                agent_output = actor_model(env_output)
                 timings.time("model")
 
                 env_output = env.step(agent_output["actions"])
