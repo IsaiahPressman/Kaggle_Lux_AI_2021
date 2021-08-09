@@ -18,7 +18,7 @@ class SubtaskSampler(ABC):
 
 class RandomSampler(SubtaskSampler):
     def sample(self, final_rewards: Optional[tuple[float, float]]) -> Subtask:
-        return self.subtask_constructors[random.randint(0, len(self.subtask_constructors))]()
+        return self.subtask_constructors[random.randrange(len(self.subtask_constructors))]()
 
 
 class MultiSubtask(Subtask):
