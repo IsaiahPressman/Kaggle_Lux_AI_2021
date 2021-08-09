@@ -67,7 +67,7 @@ class BaseObsSpace(ABC):
         pass
 
     @abstractmethod
-    def wrap_env(self, env) -> gym.Wrapper:
+    def wrap_env(self, env, reward_space: Optional[reward_spaces.BaseRewardSpace]) -> gym.Wrapper:
         pass
 
 
@@ -136,14 +136,25 @@ class FixedShapeContinuousObs(BaseObsSpace):
             "subtask": gym.spaces.MultiDiscrete(np.zeros((1, 1, x, y), dtype=int) + self.n_subtasks)
         })
 
-    def wrap_env(self, env) -> gym.Wrapper:
-        return _FixedShapeContinuousObsWrapper(env, self.include_subtask_encoding)
+    def wrap_env(self, env, subtask_reward_space: Optional[reward_spaces.Subtask] = None) -> gym.Wrapper:
+        return _FixedShapeContinuousObsWrapper(env, self.include_subtask_encoding, subtask_reward_space)
 
 
 class _FixedShapeContinuousObsWrapper(gym.Wrapper):
-    def __init__(self, env: gym.Env, include_subtask_encoding: bool):
+    def __init__(
+            self,
+            env: gym.Env,
+            include_subtask_encoding: bool,
+            subtask_reward_space: Optional[reward_spaces.Subtask]
+    ):
         super(_FixedShapeContinuousObsWrapper, self).__init__(env)
+        if include_subtask_encoding:
+            if subtask_reward_space is None:
+                raise ValueError("Cannot use subtask_encoding without providing subtask_reward_space.")
+            elif not isinstance(subtask_reward_space, reward_spaces.Subtask):
+                raise ValueError("Reward_space must be an instance of Subtask")
         self.include_subtask_encoding = include_subtask_encoding
+        self.subtask_reward_space = subtask_reward_space
         self._empty_obs = {}
         for key, spec in self.observation_space.spaces.items():
             if isinstance(spec, gym.spaces.MultiBinary):
@@ -230,7 +241,6 @@ class _FixedShapeContinuousObsWrapper(gym.Wrapper):
         obs["turn"][0, 0] = observation.turn / GAME_CONSTANTS["PARAMETERS"]["MAX_DAYS"]
 
         if self.include_subtask_encoding:
-            assert isinstance(self.unwrapped.reward_space, reward_spaces.Subtask)
-            obs["subtask"][:] = self.unwrapped.reward_space.get_subtask_encoding(SUBTASK_ENCODING)
+            obs["subtask"][:] = self.subtask_reward_space.get_subtask_encoding(SUBTASK_ENCODING)
 
         return obs

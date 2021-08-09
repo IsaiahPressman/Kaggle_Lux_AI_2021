@@ -91,13 +91,14 @@ class DictActor(nn.Module):
 class BaselineLayer(nn.Module):
     def __init__(self, in_channels: int, reward_space: RewardSpec):
         super(BaselineLayer, self).__init__()
-        self.reward_space = reward_space
+        self.reward_min = reward_space.reward_min
+        self.reward_max = reward_space.reward_max
         self.linear = nn.Linear(in_channels, 1)
-        if self.reward_space.zero_sum:
+        if reward_space.zero_sum:
             self.activation = nn.Softmax(dim=-1)
         else:
             self.activation = nn.Sigmoid()
-        if self.reward_space.only_once:
+        if reward_space.only_once:
             self.reward_space_expanded = 1.
         else:
             # Expand reward space to n_steps for rewards that occur more than once
@@ -112,7 +113,7 @@ class BaselineLayer(nn.Module):
         x = self.linear(x).view(-1, 2)
         # Rescale to [0, 1], and then to the desired reward space
         x = self.activation(x)
-        x = x * (self.reward_space.reward_max - self.reward_space.reward_min) + self.reward_space.reward_min
+        x = x * (self.reward_max - self.reward_min) + self.reward_min
         return x * self.reward_space_expanded
 
 
