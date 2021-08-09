@@ -197,7 +197,7 @@ class Subtask(BaseRewardSpace, ABC):
         Don't override reward_spec or you risk breaking classes like multi_subtask.MultiSubtask
         """
         return RewardSpec(
-            reward_min=-1.,
+            reward_min=0.,
             reward_max=1.,
             zero_sum=False,
             only_once=True
@@ -287,11 +287,14 @@ class SurviveNNights(Subtask):
     def compute_rewards_and_done(self, game_state: Game, done: bool) -> tuple[tuple[float, float], bool]:
         failed_task = self.failed_task(game_state)
         completed_task = self.completed_task(game_state)
-        rewards = np.where(
-            failed_task,
-            -1.,
-            completed_task.astype(float)
-        )
+        if failed_task.any():
+            rewards = np.where(
+                failed_task,
+                0.,
+                0.5 + 0.5 * completed_task.astype(float)
+            )
+        else:
+            rewards = completed_task.astype(float)
         done = failed_task.any() or completed_task.any() or done
         if done:
             self._reset()

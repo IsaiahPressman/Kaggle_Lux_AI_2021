@@ -46,6 +46,7 @@ def get_default_flags(flags: DictConfig) -> DictConfig:
     # Miscellaneous params
     flags.setdefault("load_dir", None)
     flags.setdefault("disable_wandb", False)
+    flags.setdefault("debug", False)
 
     return OmegaConf.create(flags)
 

@@ -1,5 +1,6 @@
 import gym
 import numpy as np
+import math
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -88,12 +89,45 @@ class DictActor(nn.Module):
             return logits.argmax(dim=-1)
 
 
+class MultiLinear(nn.Module):
+    # TODO: Add support for subtask float weightings instead of integer indices
+    def __init__(self, num_layers: int, in_features: int, out_features: int, bias: bool = True):
+        super(MultiLinear, self).__init__()
+        self.weights = nn.Parameter(torch.empty((num_layers, in_features, out_features)))
+        if bias:
+            self.biases = nn.Parameter(torch.empty((num_layers, out_features)))
+        else:
+            self.register_parameter("biases", None)
+        self.reset_parameters()
+
+    def reset_parameters(self) -> NoReturn:
+        nn.init.kaiming_uniform_(self.weights, a=math.sqrt(5))
+        if self.biases is not None:
+            # noinspection PyProtectedMember
+            fan_in, _ = nn.init._calculate_fan_in_and_fan_out(self.weights)
+            bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
+            nn.init.uniform_(self.biases, -bound, bound)
+
+    def forward(self, x: torch.Tensor, embedding_idxs: torch.Tensor) -> torch.Tensor:
+        weights = self.weights[embedding_idxs]
+        if self.biases is None:
+            biases = 0.
+        else:
+            biases = self.biases[embedding_idxs]
+        return torch.matmul(x.unsqueeze(1), weights).squeeze(1) + biases
+
+
 class BaselineLayer(nn.Module):
-    def __init__(self, in_channels: int, reward_space: RewardSpec):
+    def __init__(self, in_channels: int, reward_space: RewardSpec, n_value_heads: int):
         super(BaselineLayer, self).__init__()
+        assert n_value_heads >= 1
         self.reward_min = reward_space.reward_min
         self.reward_max = reward_space.reward_max
-        self.linear = nn.Linear(in_channels, 1)
+        self.multi_headed = n_value_heads > 1
+        if self.multi_headed:
+            self.linear = MultiLinear(n_value_heads, in_channels, 1)
+        else:
+            self.linear = nn.Linear(in_channels, 1)
         if reward_space.zero_sum:
             self.activation = nn.Softmax(dim=-1)
         else:
@@ -104,13 +138,16 @@ class BaselineLayer(nn.Module):
             # Expand reward space to n_steps for rewards that occur more than once
             self.reward_space_expanded = GAME_CONSTANTS["PARAMETERS"]["MAX_DAYS"]
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, x: torch.Tensor, value_head_idxs: Optional[torch.Tensor]):
         """
         Expects an input of shape b * 2, n_channels
         Returns an output of shape b, 2
         """
         # Project and reshape input
-        x = self.linear(x).view(-1, 2)
+        if self.multi_headed:
+            x = self.linear(x, value_head_idxs.squeeze()).view(-1, 2)
+        else:
+            x = self.linear(x).view(-1, 2)
         # Rescale to [0, 1], and then to the desired reward space
         x = self.activation(x)
         x = x * (self.reward_max - self.reward_min) + self.reward_min
@@ -126,6 +163,7 @@ class BasicActorCriticNetwork(nn.Module):
             reward_space: RewardSpec,
             actor_critic_activation: Callable = nn.ReLU,
             n_action_value_layers: int = 2,
+            n_value_heads: int = 1,
     ):
         super(BasicActorCriticNetwork, self).__init__()
         self.dict_input_layer = DictInputLayer()
@@ -145,22 +183,23 @@ class BasicActorCriticNetwork(nn.Module):
 
         baseline_layers.append(nn.AdaptiveAvgPool2d((1, 1)))
         baseline_layers.append(nn.Flatten(start_dim=1, end_dim=-1))
-        baseline_layers.append(BaselineLayer(self.base_out_channels, reward_space))
-        self.baseline = nn.Sequential(*baseline_layers)
+        self.baseline_base = nn.Sequential(*baseline_layers)
+        self.baseline = BaselineLayer(self.base_out_channels, reward_space, n_value_heads)
 
     def forward(
             self,
             x: dict[str, Union[dict, torch.Tensor]],
             sample: bool = True
     ) -> dict[str, Any]:
-        x, input_mask, available_actions_mask = self.dict_input_layer(x)
+        x, input_mask, available_actions_mask, subtask_embeddings = self.dict_input_layer(x)
         base_out, _ = self.base_model((x, input_mask))
+        subtask_embeddings = torch.repeat_interleave(subtask_embeddings, 2, dim=0)
         policy_logits, actions = self.actor(
             self.actor_base(base_out),
             available_actions_mask=available_actions_mask,
             sample=sample
         )
-        baseline = self.baseline(base_out)
+        baseline = self.baseline(self.baseline_base(base_out), subtask_embeddings)
         return dict(
             actions=actions,
             policy_logits=policy_logits,

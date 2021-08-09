@@ -388,9 +388,8 @@ def train(flags):
     full_queue = mp.SimpleQueue()
 
     for i in range(flags.num_actors):
-        # For debugging:
-        # actor = threading.Thread(
-        actor = mp.Process(
+        actor_start = threading.Thread if flags.debug else mp.Process
+        actor = actor_start(
             target=act,
             args=(
                 flags,
