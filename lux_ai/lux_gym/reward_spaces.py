@@ -50,8 +50,8 @@ class BaseRewardSpace(ABC):
     def compute_rewards_and_done(self, game_state: Game, done: bool) -> tuple[tuple[float, float], bool]:
         pass
 
-    def update_info(self, info: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
-        return info
+    def get_info(self) -> dict[str, np.ndarray]:
+        return {}
 
 
 # Full game reward spaces defined below
@@ -197,7 +197,7 @@ class Subtask(BaseRewardSpace, ABC):
         Don't override reward_spec or you risk breaking classes like multi_subtask.MultiSubtask
         """
         return RewardSpec(
-            reward_min=0.,
+            reward_min=-1.,
             reward_max=1.,
             zero_sum=False,
             only_once=True
@@ -249,7 +249,8 @@ class CollectNUranium(Subtask):
 
 
 class MakeNCityTiles(Subtask):
-    def __init__(self, n_city_tiles: int = 1):
+    def __init__(self, n_city_tiles: int = 2):
+        assert n_city_tiles > 1, "Players start with 1 city tile already"
         self.n_city_tiles = n_city_tiles
 
     def completed_task(self, game_state: Game) -> np.ndarray:
@@ -259,7 +260,8 @@ class MakeNCityTiles(Subtask):
 class MakeNContiguousCityTiles(MakeNCityTiles):
     def completed_task(self, game_state: Game) -> np.ndarray:
         return np.array([
-            max([len(city.citytiles) for city in player.cities.values()])
+            # Extra -1 is included to avoid taking max of empty sequence
+            max([len(city.citytiles) for city in player.cities.values()] + [0])
             for player in game_state.players
         ]) >= self.n_city_tiles
 
@@ -285,10 +287,15 @@ class SurviveNNights(Subtask):
     def compute_rewards_and_done(self, game_state: Game, done: bool) -> tuple[tuple[float, float], bool]:
         failed_task = self.failed_task(game_state)
         completed_task = self.completed_task(game_state)
+        rewards = np.where(
+            failed_task,
+            -1.,
+            completed_task.astype(float)
+        )
         done = failed_task.any() or completed_task.any() or done
         if done:
             self._reset()
-        return tuple(completed_task.astype(float)), done
+        return tuple(rewards), done
 
     def completed_task(self, game_state: Game) -> np.ndarray:
         return np.array([
