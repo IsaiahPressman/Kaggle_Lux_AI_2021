@@ -132,11 +132,11 @@ class BaselineLayer(nn.Module):
             self.activation = nn.Softmax(dim=-1)
         else:
             self.activation = nn.Sigmoid()
-        if reward_space.only_once:
-            self.reward_space_expanded = 1.
-        else:
+        if not reward_space.only_once:
             # Expand reward space to n_steps for rewards that occur more than once
-            self.reward_space_expanded = GAME_CONSTANTS["PARAMETERS"]["MAX_DAYS"]
+            reward_space_expanded = GAME_CONSTANTS["PARAMETERS"]["MAX_DAYS"]
+            self.reward_min *= reward_space_expanded
+            self.reward_max *= reward_space_expanded
 
     def forward(self, x: torch.Tensor, value_head_idxs: Optional[torch.Tensor]):
         """
@@ -150,8 +150,7 @@ class BaselineLayer(nn.Module):
             x = self.linear(x).view(-1, 2)
         # Rescale to [0, 1], and then to the desired reward space
         x = self.activation(x)
-        x = x * (self.reward_max - self.reward_min) + self.reward_min
-        return x * self.reward_space_expanded
+        return x * (self.reward_max - self.reward_min) + self.reward_min
 
 
 class BasicActorCriticNetwork(nn.Module):
@@ -193,7 +192,8 @@ class BasicActorCriticNetwork(nn.Module):
     ) -> dict[str, Any]:
         x, input_mask, available_actions_mask, subtask_embeddings = self.dict_input_layer(x)
         base_out, _ = self.base_model((x, input_mask))
-        subtask_embeddings = torch.repeat_interleave(subtask_embeddings, 2, dim=0)
+        if subtask_embeddings is not None:
+            subtask_embeddings = torch.repeat_interleave(subtask_embeddings, 2, dim=0)
         policy_logits, actions = self.actor(
             self.actor_base(base_out),
             available_actions_mask=available_actions_mask,

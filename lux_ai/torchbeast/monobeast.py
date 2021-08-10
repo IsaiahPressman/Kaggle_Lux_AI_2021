@@ -116,8 +116,9 @@ def reduce(losses: torch.Tensor, reduction: str) -> torch.Tensor:
         raise ValueError(f"Reduction must be one of 'sum' or 'mean', was: {reduction}")
 
 
-def compute_baseline_loss(advantages: torch.Tensor, reduction: str) -> torch.Tensor:
-    return reduce(advantages ** 2, reduction=reduction)
+def compute_baseline_loss(value_targets: torch.Tensor, values: torch.Tensor, reduction: str) -> torch.Tensor:
+    baseline_loss = F.smooth_l1_loss(values, value_targets, reduction="none")
+    return reduce(baseline_loss, reduction=reduction)
 
 
 def compute_entropy_loss(combined_learner_entropy: torch.Tensor, reduction: str) -> torch.Tensor:
@@ -309,7 +310,8 @@ def learn(
                 reduction=flags.reduction
             )
             baseline_loss = flags.baseline_cost * compute_baseline_loss(
-                vtrace_returns.vs - values,
+                vtrace_returns.vs,
+                values,
                 reduction=flags.reduction
             )
             entropy_loss = flags.entropy_cost * compute_entropy_loss(
@@ -371,15 +373,18 @@ def train(flags):
 
     t = flags.unroll_length
     b = flags.batch_size
-    n = flags.n_actor_envs
 
     example_info = create_env(flags, torch.device("cpu")).reset(force=True)["info"]
     buffers = create_buffers(flags, example_info)
 
     if flags.load_dir:
-        raise NotImplementedError
+        checkpoint_state = torch.load(Path(flags.load_dir) / flags.checkpoint_file, map_location=torch.device("cpu"))
+    else:
+        checkpoint_state = None
 
     actor_model = create_model(flags, flags.actor_device)
+    if checkpoint_state is not None:
+        actor_model.load_state_dict(checkpoint_state["model_state_dict"])
     actor_model.eval()
     actor_model.share_memory()
 
@@ -405,6 +410,8 @@ def train(flags):
         time.sleep(0.5)
 
     learner_model = create_model(flags, flags.learner_device)
+    if checkpoint_state is not None:
+        learner_model.load_state_dict(checkpoint_state["model_state_dict"])
     learner_model.train()
     learner_model = learner_model.share_memory()
     if not flags.disable_wandb:
@@ -414,6 +421,8 @@ def train(flags):
         learner_model.parameters(),
         **flags.optimizer_kwargs
     )
+    if checkpoint_state is not None:
+        optimizer.load_state_dict(checkpoint_state["optimizer_state_dict"])
 
     def lr_lambda(epoch):
         min_pct = flags.min_lr_mod
@@ -423,8 +432,12 @@ def train(flags):
 
     grad_scaler = amp.GradScaler()
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+    if checkpoint_state is not None:
+        scheduler.load_state_dict(checkpoint_state["scheduler_state_dict"])
 
     step, stats = 0, {}
+    if checkpoint_state is not None:
+        step = checkpoint_state["step"]
 
     def batch_and_learn(learner_idx, lock=threading.Lock()):
         """Thread target for the learning process."""
@@ -473,7 +486,7 @@ def train(flags):
                 "model_state_dict": actor_model.state_dict(),
                 "optimizer_state_dict": optimizer.state_dict(),
                 "scheduler_state_dict": scheduler.state_dict(),
-                "flags": vars(flags),
+                "step": step,
             },
             checkpoint_path,
         )
