@@ -19,7 +19,7 @@ obs_space_kwargs:
   include_subtask_encoding: False
 reward_space: StatefulMultiReward
 reward_space_kwargs:
-  negative_weight: 2
+  negative_weight: 1.1
 
 ## TRAINING params
 total_steps: 1e8
@@ -51,6 +51,8 @@ min_lr_mod: 0.01
 ## LOSS params
 entropy_cost: 0.0001
 baseline_cost: 1.
+# lambda parameter for TD-lambda and UPGO losses
+lmb: 0.8
 reduction: sum
 
 # MISCELLANEOUS params
@@ -62,5 +64,5 @@ model_log_freq: 100
 sharing_strategy: file_descriptor
 
 # Continue from previous run
-load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/2021-08-10/11-28-49/
-checkpoint_file: 001653120.pt
+#load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/2021-08-10/11-28-49/
+#checkpoint_file: 001653120.pt

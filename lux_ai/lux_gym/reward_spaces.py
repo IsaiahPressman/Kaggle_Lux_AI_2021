@@ -137,9 +137,10 @@ class StatefulMultiReward(FullGameRewardSpace):
             "city": 1.,
             "unit": 0.5,
             "research": 0.1,
-            "fuel": 0.001,
+            "fuel": 0.005,
             # Penalize workers each step that their cargo remains full
-            "full_workers": -0.01,
+            # "full_workers": -0.01,
+            "full_workers": 0.,
         }
         self._reset()
 

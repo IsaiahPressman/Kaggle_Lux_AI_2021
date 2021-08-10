@@ -32,7 +32,7 @@ from torch import multiprocessing as mp
 from torch import nn
 from torch.nn import functional as F
 
-from .core import prof, vtrace
+from .core import prof, td_lambda, upgo, vtrace
 from .core.buffer_utils import Buffers, create_buffers, fill_buffers_inplace, stack_buffers, split_buffers, \
     buffers_apply
 from ..lux_gym import create_env
@@ -117,7 +117,7 @@ def reduce(losses: torch.Tensor, reduction: str) -> torch.Tensor:
 
 
 def compute_baseline_loss(value_targets: torch.Tensor, values: torch.Tensor, reduction: str) -> torch.Tensor:
-    baseline_loss = F.smooth_l1_loss(values, value_targets, reduction="none")
+    baseline_loss = F.smooth_l1_loss(values, value_targets.detach(), reduction="none")
     return reduce(baseline_loss, reduction=reduction)
 
 
@@ -303,7 +303,48 @@ def learn(
                 values=values,
                 bootstrap_value=bootstrap_value
             )
+            td_lambda_returns = td_lambda.td_lambda(
+                rewards=batch["reward"],
+                values=values,
+                bootstrap_value=bootstrap_value,
+                discounts=discounts,
+                lmb=flags.lmb
+            )
+            upgo_returns = upgo.upgo(
+                rewards=batch["reward"],
+                values=values,
+                bootstrap_value=bootstrap_value,
+                discounts=discounts,
+                lmb=flags.lmb
+            )
 
+            vtrace_pg_loss = compute_policy_gradient_loss(
+                combined_learner_action_log_probs,
+                vtrace_returns.pg_advantages,
+                reduction=flags.reduction
+            )
+            upgo_clipped_importance = torch.minimum(
+                vtrace_returns.log_rhos.exp(),
+                torch.ones_like(vtrace_returns.log_rhos)
+            ).detach()
+            upgo_pg_loss = compute_policy_gradient_loss(
+                combined_learner_action_log_probs,
+                upgo_clipped_importance * upgo_returns.advantages,
+                reduction=flags.reduction
+            )
+            baseline_loss = compute_baseline_loss(
+                td_lambda_returns.vs,
+                values,
+                reduction=flags.reduction
+            )
+            entropy_loss = flags.entropy_cost * compute_entropy_loss(
+                combined_learner_entropy,
+                reduction=flags.reduction
+            )
+            total_loss = vtrace_pg_loss + upgo_pg_loss + baseline_loss + entropy_loss
+
+            # Pure Vtrace losses
+            """
             pg_loss = compute_policy_gradient_loss(
                 combined_learner_action_log_probs,
                 vtrace_returns.pg_advantages,
@@ -319,6 +360,7 @@ def learn(
                 reduction=flags.reduction
             )
             total_loss = pg_loss + baseline_loss + entropy_loss
+            """
 
             last_lr = lr_scheduler.get_last_lr()
             assert len(last_lr) == 1, 'Logging per-parameter LR still needs support'
@@ -329,10 +371,11 @@ def learn(
                     for key, val in batch["info"].items() if key.startswith("LOGGING_")
                 },
                 "Loss": {
-                    "pg_loss": pg_loss.item(),
-                    "baseline_loss": baseline_loss.item(),
-                    "entropy_loss": entropy_loss.item(),
-                    "total_loss": total_loss.item(),
+                    "vtrace_pg_loss": vtrace_pg_loss.detach().item(),
+                    "upgo_pg_loss": upgo_pg_loss.detach().item(),
+                    "baseline_loss": baseline_loss.detach().item(),
+                    "entropy_loss": entropy_loss.detach().item(),
+                    "total_loss": total_loss.detach().item(),
                 },
                 "Misc": {
                     "learning_rate": last_lr,
@@ -436,8 +479,6 @@ def train(flags):
         scheduler.load_state_dict(checkpoint_state["scheduler_state_dict"])
 
     step, stats = 0, {}
-    if checkpoint_state is not None:
-        step = checkpoint_state["step"]
 
     def batch_and_learn(learner_idx, lock=threading.Lock()):
         """Thread target for the learning process."""
@@ -486,7 +527,6 @@ def train(flags):
                 "model_state_dict": actor_model.state_dict(),
                 "optimizer_state_dict": optimizer.state_dict(),
                 "scheduler_state_dict": scheduler.state_dict(),
-                "step": step,
             },
             checkpoint_path,
         )
