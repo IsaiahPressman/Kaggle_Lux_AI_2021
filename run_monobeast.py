@@ -64,6 +64,8 @@ def main(flags: DictConfig):
         # this is useful e.g. if you did total_steps=N before and want to increase it
         logging.info("Loading existing configuration, we're continuing a previous run")
         new_flags = OmegaConf.load(Path(flags.load_dir) / "config.yaml")
+        new_flags.load_dir = flags.load_dir
+        new_flags.checkpoint_file = flags.checkpoint_file
         flags = OmegaConf.merge(new_flags, cli_conf)
 
     flags = get_default_flags(flags)

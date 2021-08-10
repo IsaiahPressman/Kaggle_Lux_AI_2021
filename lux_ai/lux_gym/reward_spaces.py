@@ -115,13 +115,18 @@ class StatefulMultiReward(FullGameRewardSpace):
     @staticmethod
     def get_reward_spec() -> RewardSpec:
         return RewardSpec(
-            reward_min=-1.,
-            reward_max=1.,
+            reward_min=-1. / GAME_CONSTANTS["PARAMETERS"]["MAX_DAYS"],
+            reward_max=1. / GAME_CONSTANTS["PARAMETERS"]["MAX_DAYS"],
             zero_sum=False,
             only_once=False
         )
 
-    def __init__(self):
+    def __init__(self, positive_weight: float = 1., negative_weight: float = 1.):
+        assert positive_weight > 0.
+        assert negative_weight > 0.
+        self.positive_weight = positive_weight
+        self.negative_weight = negative_weight
+
         self.city_count = np.empty((2,), dtype=float)
         self.unit_count = np.empty_like(self.city_count)
         self.research_points = np.empty_like(self.city_count)
@@ -130,20 +135,30 @@ class StatefulMultiReward(FullGameRewardSpace):
         self.weights = {
             "game_result": 10.,
             "city": 1.,
-            "unit": 1.,
-            "research": 0.2,
-            "fuel": 0.01
+            "unit": 0.5,
+            "research": 0.1,
+            "fuel": 0.001,
+            # Penalize workers each step that their cargo remains full
+            "full_workers": -0.01,
         }
+        self._reset()
 
     def compute_rewards(self, game_state: Game, done: bool) -> tuple[float, float]:
         new_city_count = count_cities(game_state)
         new_unit_count = count_units(game_state)
         new_research_points = count_research_points(game_state)
         new_total_fuel = count_total_fuel(game_state)
-        city_diff = new_city_count - self.city_count
-        unit_diff = new_unit_count - self.unit_count
-        research_diff = new_research_points - self.research_points
-        fuel_diff = new_total_fuel - self.total_fuel
+
+        reward_items_dict = {
+            "city": new_city_count - self.city_count,
+            "unit": new_unit_count - self.unit_count,
+            "research": new_research_points - self.research_points,
+            "fuel": new_total_fuel - self.total_fuel,
+            "full_workers": np.array([
+                sum(unit.get_cargo_space_left() > 0 for unit in player.units if unit.is_worker())
+                for player in game_state.players
+            ]),
+        }
 
         if done:
             game_result_reward = [int(GameResultReward.compute_player_reward(p)) for p in game_state.players]
@@ -155,13 +170,28 @@ class StatefulMultiReward(FullGameRewardSpace):
             self.unit_count = new_unit_count
             self.research_points = new_research_points
             self.total_fuel = new_total_fuel
+        reward_items_dict["game_result"] = game_result_reward
 
-        reward = (game_result_reward * self.weights["game_result"] +
-                  city_diff * self.weights["city"] +
-                  unit_diff * self.weights["unit"] +
-                  research_diff * self.weights["research"] +
-                  fuel_diff * self.weights["fuel"])
-        return tuple(reward / 100.)
+        assert self.weights.keys() == reward_items_dict.keys()
+        reward = np.stack(
+            [self.weight_rewards(reward_items_dict[key] * w) for key, w in self.weights.items()],
+            axis=0
+        ).sum(axis=0)
+
+        return tuple(reward / 100. / max(self.positive_weight, self.negative_weight))
+
+    def weight_rewards(self, reward: np.ndarray) -> np.ndarray:
+        reward = np.where(
+            reward > 0.,
+            self.positive_weight * reward,
+            reward
+        )
+        reward = np.where(
+            reward < 0.,
+            self.negative_weight * reward,
+            reward
+        )
+        return reward
 
     def _reset(self) -> NoReturn:
         self.city_count = np.ones_like(self.city_count)

@@ -1,4 +1,4 @@
-import copy
+from copy import copy
 import gym
 import numpy as np
 import torch
@@ -9,7 +9,7 @@ Buffers = list[dict[str, Union[dict, torch.Tensor]]]
 
 def fill_buffers_inplace(buffers: Union[dict, torch.Tensor], fill_vals: Union[dict, torch.Tensor], step: int):
     if isinstance(fill_vals, dict):
-        for key, val in fill_vals.items():
+        for key, val in copy(fill_vals).items():
             fill_buffers_inplace(buffers[key], val, step)
     else:
         buffers[step, ...] = fill_vals[:]
@@ -17,7 +17,7 @@ def fill_buffers_inplace(buffers: Union[dict, torch.Tensor], fill_vals: Union[di
 
 def stack_buffers(buffers: Buffers, dim: int) -> dict[str, Union[dict, torch.Tensor]]:
     stacked_buffers = {}
-    for key, val in copy.copy(buffers[0]).items():
+    for key, val in copy(buffers[0]).items():
         if isinstance(val, dict):
             stacked_buffers[key] = stack_buffers([b[key] for b in buffers], dim)
         else:
@@ -32,7 +32,7 @@ def split_buffers(
         contiguous: bool,
 ) -> list[Union[dict, torch.Tensor]]:
     buffers_split = None
-    for key, val in buffers.items():
+    for key, val in copy(buffers).items():
         if isinstance(val, dict):
             bufs = split_buffers(val, split_size_or_sections, dim, contiguous)
         else:
@@ -50,7 +50,7 @@ def split_buffers(
 def buffers_apply(buffers: Union[dict, torch.Tensor], func: Callable[[torch.Tensor], Any]) -> Union[dict, torch.Tensor]:
     if isinstance(buffers, dict):
         return {
-            key: buffers_apply(val, func) for key, val in buffers.items()
+            key: buffers_apply(val, func) for key, val in copy(buffers).items()
         }
     else:
         return func(buffers)

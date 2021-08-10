@@ -82,6 +82,8 @@ class RewardSpaceWrapper(gym.Wrapper):
     def non_logging_info(self) -> dict[str, np.ndarray]:
         if isinstance(self.reward_space, Subtask):
             return {"subtask_embeddings": np.array([self.reward_space.get_subtask_encoding(SUBTASK_ENCODING)])}
+        else:
+            return {}
 
     def reset(self, **kwargs):
         obs, _, _, info = super(RewardSpaceWrapper, self).reset(**kwargs)

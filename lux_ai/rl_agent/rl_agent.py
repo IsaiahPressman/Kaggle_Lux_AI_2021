@@ -3,7 +3,7 @@ import torch
 from typing import *
 import yaml
 
-from ..lux_gym import LuxEnv, wrappers
+from ..lux_gym import create_reward_space, LuxEnv, wrappers
 from ..nns import create_model
 from ..utils import flags_to_namespace
 
@@ -45,10 +45,11 @@ class RLAgent:
         env = LuxEnv(
             act_space=self.flags.act_space(),
             obs_space=self.flags.obs_space(),
-            reward_space=self.flags.reward_space(),
             run_game_automatically=False
         )
-        env = env.obs_space.wrap_env(env)
+        reward_space = create_reward_space(self.flags)
+        env = wrappers.RewardSpaceWrapper(env, reward_space)
+        env = env.obs_space.wrap_env(env, reward_space)
         env = wrappers.PadEnv(env)
         env = wrappers.VecEnv([env])
         env = wrappers.PytorchEnv(env, self.device)

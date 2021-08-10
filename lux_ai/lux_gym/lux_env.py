@@ -21,11 +21,13 @@ from ..lux_gym.reward_spaces import GameResultReward
 DIR_PATH = Path(__file__).parent.parent
 
 
+"""
 def _cleanup_dimensions_factory(dimension_process: Popen) -> NoReturn:
     def cleanup_dimensions():
         if dimension_process is not None:
             dimension_process.kill()
     return cleanup_dimensions
+"""
 
 
 def _generate_pos_to_unit_dict(game_state: Game) -> dict[tuple, Optional[Unit]]:
@@ -57,6 +59,7 @@ class LuxEnv(gym.Env):
             configuration: Optional[dict[str, any]] = None,
             seed: Optional[int] = None,
             run_game_automatically: bool = True,
+            restart_subproc_after_n_resets: int = 100
     ):
         super(LuxEnv, self).__init__()
         self.obs_space = obs_space
@@ -65,6 +68,7 @@ class LuxEnv(gym.Env):
         self.observation_space = self.obs_space.get_obs_spec()
         self.board_dims = MAX_BOARD_SIZE
         self.run_game_automatically = run_game_automatically
+        self.restart_subproc_after_n_resets = restart_subproc_after_n_resets
 
         self.game_state = Game()
         if configuration is not None:
@@ -79,7 +83,14 @@ class LuxEnv(gym.Env):
         self.info = {}
         self.pos_to_unit_dict = {}
         self.pos_to_city_tile_dict = {}
+        self.reset_count = 0
 
+        self.dimension_process = None
+        self._restart_dimension_process()
+
+    def _restart_dimension_process(self) -> NoReturn:
+        if self.dimension_process is not None:
+            self.dimension_process.kill()
         if self.run_game_automatically:
             # 1.1: Initialize dimensions in the background
             self.dimension_process = Popen(
@@ -87,12 +98,13 @@ class LuxEnv(gym.Env):
                 stdin=PIPE,
                 stdout=PIPE
             )
-            atexit.register(_cleanup_dimensions_factory(self.dimension_process))
-        else:
-            self.dimension_process = None
+            # atexit.register(_cleanup_dimensions_factory(self.dimension_process))
 
     def reset(self, observation_updates: Optional[list[str]] = None) -> tuple[Game, tuple[float, float], bool, dict]:
         self.game_state = Game()
+        self.reset_count = (self.reset_count + 1) % self.restart_subproc_after_n_resets
+        if self.reset_count == 0:
+            self._restart_dimension_process()
         if self.run_game_automatically:
             assert observation_updates is None, "Game is being run automatically"
             # 1.2: Initialize a blank state game if new episode is starting
