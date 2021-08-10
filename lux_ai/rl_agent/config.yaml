@@ -8,7 +8,7 @@ obs_space_kwargs:
   include_subtask_encoding: false
 reward_space: StatefulMultiReward
 reward_space_kwargs:
-  negative_weight: 2
+  negative_weight: 1.1
 total_steps: 100000000.0
 num_actors: 2
 n_actor_envs: 16
@@ -29,6 +29,7 @@ optimizer_kwargs:
 min_lr_mod: 0.01
 entropy_cost: 0.0001
 baseline_cost: 1.0
+lmb: 0.8
 reduction: sum
 actor_device: cuda:1
 learner_device: cuda:0

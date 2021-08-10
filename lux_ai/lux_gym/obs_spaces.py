@@ -237,7 +237,7 @@ class _FixedShapeContinuousObsWrapper(gym.Wrapper):
             obs["researched_coal"][0, p_id] = player.researched_coal()
             obs["researched_uranium"][0, p_id] = player.researched_uranium()
         dn_cycle_len = GAME_CONSTANTS["PARAMETERS"]["DAY_LENGTH"] + GAME_CONSTANTS["PARAMETERS"]["NIGHT_LENGTH"]
-        obs["night"][0, 0] = (observation.turn - 1) % dn_cycle_len >= GAME_CONSTANTS["PARAMETERS"]["DAY_LENGTH"]
+        obs["night"][0, 0] = observation.turn % dn_cycle_len >= GAME_CONSTANTS["PARAMETERS"]["DAY_LENGTH"]
         obs["turn"][0, 0] = observation.turn / GAME_CONSTANTS["PARAMETERS"]["MAX_DAYS"]
 
         if self.include_subtask_encoding:
