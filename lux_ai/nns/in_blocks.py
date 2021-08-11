@@ -41,21 +41,26 @@ class ConvEmbeddingInputLayer(nn.Module):
         n_continuous_channels = 0
         self.keys_to_op = {}
         for key, val in obs_space.spaces.items():
+            assert val.shape[0] == 1
             if key.endswith("_COUNT"):
                 if key[:-6] not in obs_space.spaces.keys():
                     raise ValueError(f"{key} was found in obs_space without an associated {key[:-6]}.")
                 self.keys_to_op[key] = "count"
-            elif isinstance(val, gym.spaces.MultiBinary):
-                assert embedding_dim % np.prod(val.shape[:2]) == 0, f"{key}: {embedding_dim}, {val.shape[:2]}"
-                embeddings[key] = nn.Embedding(2, embedding_dim // np.prod(val.shape[:2]), padding_idx=0)
-                self.keys_to_op[key] = "embedding"
-            elif isinstance(val, gym.spaces.MultiDiscrete):
-                assert embedding_dim % np.prod(val.shape[:2]) == 0, f"{embedding_dim}, {val.shape[:2]}"
-                if val.nvec.min() != val.nvec.max():
-                    raise ValueError(f"MultiDiscrete observation spaces must all have the same number of embeddings. "
-                                     f"Found: {np.unique(val.nvec)}")
-                raise NotImplementedError("What should be the padding index, if any?")
-                embeddings[key] = nn.Embedding(val.nvec.ravel()[0], embedding_dim // np.prod(val.shape[:2]))
+            elif isinstance(val, gym.spaces.MultiBinary) or isinstance(val, gym.spaces.MultiDiscrete):
+                # assert embedding_dim % np.prod(val.shape[:2]) == 0, f"{key}: {embedding_dim}, {val.shape[:2]}"
+                if isinstance(val, gym.spaces.MultiBinary):
+                    n_embeddings = 2
+                elif isinstance(val, gym.spaces.MultiDiscrete):
+                    if val.nvec.min() != val.nvec.max():
+                        raise ValueError(
+                            f"MultiDiscrete observation spaces must all have the same number of embeddings. "
+                            f"Found: {np.unique(val.nvec)}")
+                    n_embeddings = val.nvec.ravel()[0]
+                else:
+                    raise NotImplementedError(f"Got gym space: {type(val)}")
+                n_players = val.shape[1]
+                n_embeddings = n_players * (n_embeddings - 1) + 1
+                embeddings[key] = nn.Embedding(n_embeddings, embedding_dim, padding_idx=0)
                 self.keys_to_op[key] = "embedding"
             elif isinstance(val, gym.spaces.Box):
                 n_continuous_channels += np.prod(val.shape[:2])
@@ -107,18 +112,22 @@ class ConvEmbeddingInputLayer(nn.Module):
                     end_dim=2
                 )
             elif op == "embedding":
-                # Embedding out produces tensor of shape (b, n*p, ..., d/(n*p))
+                # Embedding out produces tensor of shape (b, p|1, ..., d)
                 # This should be reshaped to size (b, d, ...)
+                # First, we take all embeddings from the opponent and increment them
+                if out.shape[1] == 2:
+                    # noinspection PyTypeChecker
+                    out[:, 1] = torch.where(
+                        out[:, 1] != 0,
+                        out[:, 1] + (self.embeddings[key].num_embeddings - 1) // 2,
+                        out[:, 1]
+                    )
                 out = self.select(self.embeddings[key], out)
-                # In case out is of size (b, n*p, d/(n*p)), expand it to (b, n*p, x, y, d/(n*p))
+                # In case out is of size (b, p, d), expand it to (b, p, 1, 1, d)
                 if len(out.shape) == 3:
                     out = out.unsqueeze(-2).unsqueeze(-2)
                 assert len(out.shape) == 5
-                embedding_outs[key] = torch.flatten(
-                    out.permute(0, 1, 4, 2, 3),
-                    start_dim=1,
-                    end_dim=2
-                ) * input_mask
+                embedding_outs[key] = out.permute(0, 1, 4, 2, 3).sum(dim=1) * input_mask
             elif op == "continuous":
                 if len(out.shape) == 2:
                     out = out.unsqueeze(-1).unsqueeze(-1)
