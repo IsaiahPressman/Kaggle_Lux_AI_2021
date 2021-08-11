@@ -14,12 +14,13 @@ group: conv
 
 ## ENV params
 act_space: BasicActionSpace
-obs_space: FixedShapeContinuousObs
+obs_space: FixedShapeEmbeddingObs
 obs_space_kwargs:
   include_subtask_encoding: False
 reward_space: StatefulMultiReward
 reward_space_kwargs:
-  negative_weight: 1.1
+  early_stop: True
+  negative_weight: 1
 
 ## TRAINING params
 total_steps: 1e8
@@ -37,8 +38,6 @@ normalize: False
 use_index_select: True
 # Conv-specific params
 kernel_size: 5
-# Attention-specific params
-mhsa_heads: 4
 
 
 ## OPTIMIZER params
@@ -49,7 +48,7 @@ optimizer_kwargs:
 min_lr_mod: 0.01
 
 ## LOSS params
-entropy_cost: 0.0001
+entropy_cost: 0.002
 baseline_cost: 1.
 # lambda parameter for TD-lambda and UPGO losses
 lmb: 0.8

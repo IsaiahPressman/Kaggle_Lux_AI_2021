@@ -60,7 +60,6 @@ class FullGameRewardSpace(BaseRewardSpace):
     """
     A class used for defining a reward space for the full game.
     """
-
     def compute_rewards_and_done(self, game_state: Game, done: bool) -> tuple[tuple[float, float], bool]:
         return self.compute_rewards(game_state, done), done
 
@@ -121,11 +120,12 @@ class StatefulMultiReward(FullGameRewardSpace):
             only_once=False
         )
 
-    def __init__(self, positive_weight: float = 1., negative_weight: float = 1.):
+    def __init__(self, positive_weight: float = 1., negative_weight: float = 1., early_stop: bool = False):
         assert positive_weight > 0.
         assert negative_weight > 0.
         self.positive_weight = positive_weight
         self.negative_weight = negative_weight
+        self.early_stop = early_stop
 
         self.city_count = np.empty((2,), dtype=float)
         self.unit_count = np.empty_like(self.city_count)
@@ -143,6 +143,11 @@ class StatefulMultiReward(FullGameRewardSpace):
             "full_workers": 0.,
         }
         self._reset()
+
+    def compute_rewards_and_done(self, game_state: Game, done: bool) -> tuple[tuple[float, float], bool]:
+        if self.early_stop:
+            done = done or (count_cities(game_state) == 0).any() or (count_units(game_state) == 0).any()
+        return self.compute_rewards(game_state, done), done
 
     def compute_rewards(self, game_state: Game, done: bool) -> tuple[float, float]:
         new_city_count = count_cities(game_state)

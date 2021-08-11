@@ -14,25 +14,28 @@ group: attention
 
 ## ENV params
 act_space: BasicActionSpace
-obs_space: FIXED_SHAPE_CONTINUOUS_OBS
+obs_space: FixedShapeEmbeddingObs
+obs_space_kwargs:
+  include_subtask_encoding: False
 reward_space: StatefulMultiReward
+reward_space_kwargs:
+  early_stop: True
+  negative_weight: 1.
 
 ## TRAINING params
 total_steps: 1e8
 num_actors: 2
 n_actor_envs: 16
 unroll_length: 10
-batch_size: 1
+batch_size: 4
 discounting: 0.9995
 
 ## MODEL params
 model_arch: attention_model
-n_blocks: 8
+n_blocks: 4
 hidden_dim: 128
 normalize: True
 use_index_select: True
-# Conv-specific params
-kernel_size: 5
 # Attention-specific params
 mhsa_heads: 2
 
@@ -45,15 +48,20 @@ optimizer_kwargs:
 min_lr_mod: 0.01
 
 ## LOSS params
-entropy_cost: 0.0001
+entropy_cost: 0.002
 baseline_cost: 1.
+# lambda parameter for TD-lambda and UPGO losses
+lmb: 0.8
 reduction: sum
 
 # MISCELLANEOUS params
-# load_dir: null
-actor_device: cuda:0
-learner_device: cuda:1
+actor_device: cuda:1
+learner_device: cuda:0
 disable_wandb: False
 model_log_freq: 100
 # file_descriptor or file_system
 sharing_strategy: file_descriptor
+
+# Continue from previous run
+#load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/2021-08-10/11-28-49/
+#checkpoint_file: 001653120.pt

@@ -117,7 +117,8 @@ class LuxEnv(gym.Env):
             self.dimension_process.stdin.write((json.dumps(initiate) + "\n").encode())
             self.dimension_process.stdin.flush()
             agent1res = json.loads(self.dimension_process.stdout.readline())
-            _ = self.dimension_process.stdout.readline()
+            # Skip agent2res and match_obs_meta
+            _ = self.dimension_process.stdout.readline(), self.dimension_process.stdout.readline()
 
             self.game_state._initialize(agent1res)
             self.game_state._update(agent1res[2:])
@@ -179,7 +180,8 @@ class LuxEnv(gym.Env):
 
         # 3.1 : Receive and parse the observations returned by dimensions via stdout
         agent1res = json.loads(self.dimension_process.stdout.readline())
-        _ = self.dimension_process.stdout.readline()
+        # Skip agent2res and match_obs_meta
+        _ = self.dimension_process.stdout.readline(), self.dimension_process.stdout.readline()
         self.game_state._update(agent1res)
 
         # Check if done
