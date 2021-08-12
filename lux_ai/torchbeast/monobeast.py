@@ -267,6 +267,7 @@ def learn(
             )
             combined_learner_action_log_probs = torch.zeros_like(combined_behavior_action_log_probs)
             combined_learner_entropy = torch.zeros_like(combined_behavior_action_log_probs)
+            entropies = {}
             for act_space in batch["actions"].keys():
                 actions = batch["actions"][act_space]
                 actions_taken_mask = batch["info"]["actions_taken"][act_space]
@@ -291,6 +292,7 @@ def learn(
                     actions_taken_mask
                 )
                 combined_learner_entropy = combined_learner_entropy + learner_policy_entropy
+                entropies[act_space] = reduce(learner_policy_entropy, reduction=flags.reduction).detach().cpu().item()
 
             discounts = (~batch["done"]).float() * flags.discounting
             discounts = discounts.unsqueeze(-1).expand_as(combined_behavior_action_log_probs)
@@ -337,7 +339,7 @@ def learn(
                 values,
                 reduction=flags.reduction
             )
-            entropy_loss = flags.entropy_cost * compute_entropy_loss(
+            entropy_loss = flags.entropy_cost * reduce(
                 combined_learner_entropy,
                 reduction=flags.reduction
             )
@@ -376,6 +378,10 @@ def learn(
                     "baseline_loss": baseline_loss.detach().item(),
                     "entropy_loss": entropy_loss.detach().item(),
                     "total_loss": total_loss.detach().item(),
+                },
+                "Entropy": {
+                    "overall": entropy_loss.detach().cpu().item() / flags.entropy_cost,
+                    **entropies
                 },
                 "Misc": {
                     "learning_rate": last_lr,
