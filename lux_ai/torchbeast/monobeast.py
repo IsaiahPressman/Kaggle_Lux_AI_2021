@@ -292,7 +292,10 @@ def learn(
                     actions_taken_mask
                 )
                 combined_learner_entropy = combined_learner_entropy + learner_policy_entropy
-                entropies[act_space] = reduce(learner_policy_entropy, reduction=flags.reduction).detach().cpu().item()
+                entropies[act_space] = (reduce(
+                    learner_policy_entropy,
+                    reduction="sum"
+                ) / actions_taken_mask.sum()).detach().cpu().item()
 
             discounts = (~batch["done"]).float() * flags.discounting
             discounts = discounts.unsqueeze(-1).expand_as(combined_behavior_action_log_probs)
@@ -380,7 +383,7 @@ def learn(
                     "total_loss": total_loss.detach().item(),
                 },
                 "Entropy": {
-                    "overall": entropy_loss.detach().cpu().item() / flags.entropy_cost,
+                    "overall": sum(e for e in entropies.values() if not math.isnan(e)),
                     **entropies
                 },
                 "Misc": {

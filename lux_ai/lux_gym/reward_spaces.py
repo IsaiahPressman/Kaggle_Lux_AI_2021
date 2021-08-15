@@ -8,7 +8,7 @@ from ..lux.game_constants import GAME_CONSTANTS
 from ..lux.game_objects import Player
 
 
-def count_cities(game_state: Game) -> np.ndarray:
+def count_city_tiles(game_state: Game) -> np.ndarray:
     return np.array([player.city_tile_count for player in game_state.players])
 
 
@@ -25,6 +25,17 @@ def count_total_fuel(game_state: Game) -> np.ndarray:
 
 def count_research_points(game_state: Game) -> np.ndarray:
     return np.array([player.research_points for player in game_state.players])
+
+
+def should_early_stop(game_state: Game) -> bool:
+    ct_count = count_city_tiles(game_state)
+    unit_count = count_units(game_state)
+    ct_pct = ct_count / max(ct_count.sum(), 1)
+    unit_pct = unit_count / max(unit_count.sum(), 1)
+    return ((ct_count == 0).any() or
+            (unit_count == 0).any() or
+            (ct_pct >= 0.75).any() or
+            (unit_pct >= 0.75).any())
 
 
 class RewardSpec(NamedTuple):
@@ -78,6 +89,14 @@ class GameResultReward(FullGameRewardSpace):
             only_once=True
         )
 
+    def __init__(self, early_stop: bool = False):
+        self.early_stop = early_stop
+
+    def compute_rewards_and_done(self, game_state: Game, done: bool) -> tuple[tuple[float, float], bool]:
+        if self.early_stop:
+            done = done or should_early_stop(game_state)
+        return self.compute_rewards(game_state, done), done
+
     def compute_rewards(self, game_state: Game, done: bool) -> tuple[float, float]:
         if not done:
             return 0., 0.
@@ -107,7 +126,7 @@ class CityTileReward(FullGameRewardSpace):
         )
 
     def compute_rewards(self, game_state: Game, done: bool) -> tuple[float, float]:
-        return tuple(count_cities(game_state) / 1024.)
+        return tuple(count_city_tiles(game_state) / 1024.)
 
 
 class StatefulMultiReward(FullGameRewardSpace):
@@ -120,7 +139,13 @@ class StatefulMultiReward(FullGameRewardSpace):
             only_once=False
         )
 
-    def __init__(self, positive_weight: float = 1., negative_weight: float = 1., early_stop: bool = False):
+    def __init__(
+            self,
+            positive_weight: float = 1.,
+            negative_weight: float = 1.,
+            early_stop: bool = False,
+            **kwargs
+    ):
         assert positive_weight > 0.
         assert negative_weight > 0.
         self.positive_weight = positive_weight
@@ -141,16 +166,22 @@ class StatefulMultiReward(FullGameRewardSpace):
             # Penalize workers each step that their cargo remains full
             # "full_workers": -0.01,
             "full_workers": 0.,
+            # A reward given each step
+            "step": 0.,
         }
+        weight_keys = set(k for k in self.weights.keys())
+        self.weights.update(kwargs)
+        if weight_keys != set(self.weights.keys()):
+            raise ValueError(f"Unexpected kwargs: {weight_keys ^ set(self.weights.keys())}")
         self._reset()
 
     def compute_rewards_and_done(self, game_state: Game, done: bool) -> tuple[tuple[float, float], bool]:
         if self.early_stop:
-            done = done or (count_cities(game_state) == 0).any() or (count_units(game_state) == 0).any()
+            done = done or should_early_stop(game_state)
         return self.compute_rewards(game_state, done), done
 
     def compute_rewards(self, game_state: Game, done: bool) -> tuple[float, float]:
-        new_city_count = count_cities(game_state)
+        new_city_count = count_city_tiles(game_state)
         new_unit_count = count_units(game_state)
         new_research_points = count_research_points(game_state)
         new_total_fuel = count_total_fuel(game_state)
@@ -164,6 +195,7 @@ class StatefulMultiReward(FullGameRewardSpace):
                 sum(unit.get_cargo_space_left() > 0 for unit in player.units if unit.is_worker())
                 for player in game_state.players
             ]),
+            "step": np.ones(2, dtype=float)
         }
 
         if done:
@@ -219,6 +251,90 @@ class ZeroSumStatefulMultiReward(StatefulMultiReward):
     def compute_rewards(self, game_state: Game, done: bool) -> tuple[float, float]:
         reward = np.array(super(ZeroSumStatefulMultiReward, self).compute_rewards_and_done(game_state, done))
         return tuple(reward - reward.mean())
+
+
+class PunishingExponentialReward(BaseRewardSpace):
+    @staticmethod
+    def get_reward_spec() -> RewardSpec:
+        return RewardSpec(
+            reward_min=-1. / GAME_CONSTANTS["PARAMETERS"]["MAX_DAYS"],
+            reward_max=1. / GAME_CONSTANTS["PARAMETERS"]["MAX_DAYS"],
+            zero_sum=False,
+            only_once=False
+        )
+
+    def __init__(
+            self,
+            **kwargs
+    ):
+        self.city_count = np.empty((2,), dtype=float)
+        self.unit_count = np.empty_like(self.city_count)
+        self.research_points = np.empty_like(self.city_count)
+        self.total_fuel = np.empty_like(self.city_count)
+
+        self.weights = {
+            "game_result": 0.,
+            "city": 1.,
+            "unit": 0.5,
+            "research": 0.01,
+            "fuel": 0.001,
+        }
+        weight_keys = set(k for k in self.weights.keys())
+        self.weights.update(kwargs)
+        if weight_keys != set(self.weights.keys()):
+            raise ValueError(f"Unexpected kwargs: {weight_keys ^ set(self.weights.keys())}")
+        self._reset()
+
+    def compute_rewards_and_done(self, game_state: Game, done: bool) -> tuple[tuple[float, float], bool]:
+        new_city_count = count_city_tiles(game_state)
+        new_unit_count = count_units(game_state)
+        new_research_points = count_research_points(game_state)
+        new_total_fuel = count_total_fuel(game_state)
+
+        city_diff = new_city_count - self.city_count
+        unit_diff = new_unit_count - self.unit_count
+        reward_items_dict = {
+            "city": new_city_count,
+            "unit": new_unit_count,
+            "research": new_research_points,
+            "fuel": new_total_fuel,
+        }
+
+        if done:
+            game_result_reward = [int(GameResultReward.compute_player_reward(p)) for p in game_state.players]
+            game_result_reward = (rankdata(game_result_reward) - 1.) * 2. - 1.
+            self._reset()
+        else:
+            game_result_reward = np.array([0., 0.])
+            self.city_count = new_city_count
+            self.unit_count = new_unit_count
+            self.research_points = new_research_points
+            self.total_fuel = new_total_fuel
+        reward_items_dict["game_result"] = game_result_reward
+
+        assert self.weights.keys() == reward_items_dict.keys()
+        reward = np.stack(
+            [reward_items_dict[key] * w for key, w in self.weights.items()],
+            axis=0
+        ).sum(axis=0)
+
+        lost_unit_or_city = (city_diff < 0) | (unit_diff < 0)
+        reward = np.where(
+            lost_unit_or_city,
+            -1.,
+            reward / 100
+        )
+
+        return tuple(reward), done or lost_unit_or_city.any()
+
+    def compute_rewards(self, game_state: Game, done: bool) -> tuple[float, float]:
+        raise NotImplementedError
+
+    def _reset(self) -> NoReturn:
+        self.city_count = np.ones_like(self.city_count)
+        self.unit_count = np.ones_like(self.unit_count)
+        self.research_points = np.zeros_like(self.research_points)
+        self.total_fuel = np.zeros_like(self.total_fuel)
 
 
 # Subtask reward spaces defined below
@@ -290,7 +406,7 @@ class MakeNCityTiles(Subtask):
         self.n_city_tiles = n_city_tiles
 
     def completed_task(self, game_state: Game) -> np.ndarray:
-        return count_cities(game_state) >= self.n_city_tiles
+        return count_city_tiles(game_state) >= self.n_city_tiles
 
 
 class MakeNContiguousCityTiles(MakeNCityTiles):
@@ -342,7 +458,7 @@ class SurviveNNights(Subtask):
         ]).repeat(2)
 
     def failed_task(self, game_state: Game) -> np.ndarray:
-        new_city_count = count_cities(game_state)
+        new_city_count = count_city_tiles(game_state)
         new_unit_count = count_units(game_state)
 
         failed = np.logical_or(

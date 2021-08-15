@@ -1,14 +1,17 @@
-import atexit
 import copy
 import gym
 import itertools
 import json
 import numpy as np
 from kaggle_environments import make
+from kaggle_environments.envs.lux_ai_2021.lux_ai_2021 import dir_path as DIR_PATH
 import math
 from pathlib import Path
+from queue import Queue, Empty
 import random
 from subprocess import Popen, PIPE
+import sys
+from threading import Thread
 from typing import NoReturn, Optional
 
 from ..lux.game import Game
@@ -18,9 +21,6 @@ from ..lux_gym.obs_spaces import BaseObsSpace, MAX_BOARD_SIZE
 from ..lux_gym.reward_spaces import GameResultReward
 
 
-DIR_PATH = Path(__file__).parent.parent
-
-
 """
 def _cleanup_dimensions_factory(dimension_process: Popen) -> NoReturn:
     def cleanup_dimensions():
@@ -28,6 +28,12 @@ def _cleanup_dimensions_factory(dimension_process: Popen) -> NoReturn:
             dimension_process.kill()
     return cleanup_dimensions
 """
+
+
+def _enqueue_output(out, queue):
+    for line in iter(out.readline, b''):
+        queue.put(line)
+    out.close()
 
 
 def _generate_pos_to_unit_dict(game_state: Game) -> dict[tuple, Optional[Unit]]:
@@ -75,6 +81,8 @@ class LuxEnv(gym.Env):
             self.configuration = configuration
         else:
             self.configuration = make("lux_ai_2021").configuration
+            # 2: warnings, 1: errors, 0: none
+            self.configuration["loglevel"] = 0
         if seed is not None:
             self.seed(seed)
         elif "seed" not in self.configuration:
@@ -86,6 +94,8 @@ class LuxEnv(gym.Env):
         self.reset_count = 0
 
         self.dimension_process = None
+        self._q = None
+        self._t = None
         self._restart_dimension_process()
 
     def _restart_dimension_process(self) -> NoReturn:
@@ -94,10 +104,16 @@ class LuxEnv(gym.Env):
         if self.run_game_automatically:
             # 1.1: Initialize dimensions in the background
             self.dimension_process = Popen(
-                ["node", str(DIR_PATH / "dimensions/main.js")],
+                ["node", str(Path(DIR_PATH) / "dimensions/main.js")],
                 stdin=PIPE,
-                stdout=PIPE
+                stdout=PIPE,
+                stderr=PIPE
             )
+            # following 4 lines from https://stackoverflow.com/questions/375427/a-non-blocking-read-on-a-subprocess-pipe-in-python
+            self._q = Queue()
+            self._t = Thread(target=_enqueue_output, args=(self.dimension_process.stdout, self._q))
+            self._t.daemon = True  # thread dies with the program
+            self._t.start()
             # atexit.register(_cleanup_dimensions_factory(self.dimension_process))
 
     def reset(self, observation_updates: Optional[list[str]] = None) -> tuple[Game, tuple[float, float], bool, dict]:
@@ -116,9 +132,9 @@ class LuxEnv(gym.Env):
             }
             self.dimension_process.stdin.write((json.dumps(initiate) + "\n").encode())
             self.dimension_process.stdin.flush()
-            agent1res = json.loads(self.dimension_process.stdout.readline())
+            agent1res = json.loads(self.dimension_process.stderr.readline())
             # Skip agent2res and match_obs_meta
-            _ = self.dimension_process.stdout.readline(), self.dimension_process.stdout.readline()
+            _ = self.dimension_process.stderr.readline(), self.dimension_process.stderr.readline()
 
             self.game_state._initialize(agent1res)
             self.game_state._update(agent1res[2:])
@@ -179,14 +195,24 @@ class LuxEnv(gym.Env):
         self.dimension_process.stdin.flush()
 
         # 3.1 : Receive and parse the observations returned by dimensions via stdout
-        agent1res = json.loads(self.dimension_process.stdout.readline())
+        agent1res = json.loads(self.dimension_process.stderr.readline())
         # Skip agent2res and match_obs_meta
-        _ = self.dimension_process.stdout.readline(), self.dimension_process.stdout.readline()
+        _ = self.dimension_process.stderr.readline(), self.dimension_process.stderr.readline()
         self.game_state._update(agent1res)
 
         # Check if done
-        match_status = json.loads(self.dimension_process.stdout.readline())
+        match_status = json.loads(self.dimension_process.stderr.readline())
         self.done = match_status["status"] == "finished"
+
+        while True:
+            try:
+                line = self._q.get_nowait()
+            except Empty:
+                # no standard error received, break
+                break
+            else:
+                # standard error output received, print it out
+                print(line.decode(), file=sys.stderr, end='')
 
     def _update_internal_state(self) -> NoReturn:
         self.pos_to_unit_dict = _generate_pos_to_unit_dict(self.game_state)
