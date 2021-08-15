@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 import torch
 from typing import *
@@ -13,27 +14,13 @@ from ..lux.constants import Constants
 from ..lux.game_constants import GAME_CONSTANTS
 from ..lux import annotate
 
-"""
-if __package__ == "":
-    # not sure how to fix this atm
-    from ..lux.game import Game
-    from ..lux.game_map import Cell
-    from ..lux.constants import Constants
-    from ..lux.game_constants import GAME_CONSTANTS
-    from ..lux import annotate
-else:
-    from lux_ai.lux.game import Game
-    from lux_ai.lux.game_map import Cell
-    from lux_ai.lux.constants import Constants
-    from lux_ai.lux.game_constants import GAME_CONSTANTS
-    from lux_ai.lux import annotate
-"""
-
 DIRECTIONS = Constants.DIRECTIONS
 RESOURCE_TYPES = Constants.RESOURCE_TYPES
 CONFIG_PATH = Path(__file__).parent / "config.yaml"
 CHECKPOINT_PATH, = list(Path(__file__).parent.glob('*.pt'))
 AGENT = None
+
+os.environ["OMP_NUM_THREADS"] = "1"
 
 
 class RLAgent:
@@ -70,8 +57,9 @@ class RLAgent:
     def __call__(self, obs, conf) -> List[str]:
         self.preprocess(obs, conf)
         env_output = self.env.step(self.action_placeholder)
-        agent_output = self.model.select_best_actions(env_output)
-        # agent_output = self.model.sample_actions(env_output)
+        with torch.no_grad():
+            agent_output = self.model.select_best_actions(env_output)
+            # agent_output = self.model.sample_actions(env_output)
         actions, _ = self.unwrapped_env.process_actions({
             key: value.squeeze(0).cpu().numpy() for key, value in agent_output["actions"].items()
         })
@@ -89,7 +77,9 @@ class RLAgent:
         actions.append(annotate.sidetext(f"Research points: {player.research_points}"))
         """
 
-        actions.append(annotate.sidetext(f"Turn: {self.game_state.turn}"))
+        #actions.append(annotate.sidetext(f"Turn: {self.game_state.turn}"))
+        value = agent_output["baseline"].squeeze().cpu().numpy()[obs.player]
+        actions.append(annotate.sidetext(f"Predicted value: {value:.2f}"))
         return actions
 
     def preprocess(self, obs, conf) -> NoReturn:

@@ -60,4 +60,4 @@ def create_reward_space(flags) -> reward_spaces.BaseRewardSpace:
         subtask_sampler = SUBTASK_SAMPLERS_DICT[flags.reward_space_kwargs["subtask_sampler"]]
         return flags.reward_space(subtasks, subtask_sampler)
 
-    return flags.reward_space()
+    return flags.reward_space(**flags.reward_space_kwargs)
