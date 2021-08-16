@@ -59,8 +59,6 @@ class Game:
                 x = int(strs[4])
                 y = int(strs[5])
                 cooldown = float(strs[6])
-                if unittype == 0 and cooldown > 3.:
-                    n = 19
                 wood = int(strs[7])
                 coal = int(strs[8])
                 uranium = int(strs[9])
