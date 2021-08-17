@@ -1,18 +1,25 @@
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import List, Optional, Sequence, Union
 
-from ..lux_ai.lux.game_objects import CityTile, Unit, Player
-from ..lux_ai.lux.game_map import Position
+from ..lux.game_objects import CityTile, Unit, Player
 
 
 @dataclass
 class Action:
     actor: Optional[Union[CityTile, Unit, Player]]
     action_str: str
+    debug_strs: Optional[Union[str, Sequence[str]]] = None
 
     @property
     def action_type(self):
         raise NotImplementedError
+
+    def get_debug_strs(self) -> List[str]:
+        if self.debug_strs:
+            if not isinstance(self.debug_strs, str) and isinstance(self.debug_strs, Sequence):
+                return [s for s in self.debug_strs]
+            return [self.debug_strs]
+        return []
 
 
 """
