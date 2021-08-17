@@ -32,6 +32,7 @@ class RLAgent:
         env = LuxEnv(
             act_space=self.flags.act_space(),
             obs_space=self.flags.obs_space(),
+            configuration=conf,
             run_game_automatically=False
         )
         reward_space = create_reward_space(self.flags)
@@ -56,7 +57,7 @@ class RLAgent:
 
     def __call__(self, obs, conf) -> List[str]:
         self.preprocess(obs, conf)
-        env_output = self.env.step(self.action_placeholder)
+        env_output = self.get_env_output()
         with torch.no_grad():
             agent_output = self.model.select_best_actions(env_output)
             # agent_output = self.model.sample_actions(env_output)
@@ -86,6 +87,9 @@ class RLAgent:
         # Do not edit
         self.unwrapped_env.manual_step(obs["updates"])
 
+    def get_env_output(self) -> dict:
+        return self.env.step(self.action_placeholder)
+
     @property
     def unwrapped_env(self) -> LuxEnv:
         return self.env.unwrapped[0]
@@ -93,6 +97,11 @@ class RLAgent:
     @property
     def game_state(self) -> Game:
         return self.unwrapped_env.game_state
+
+    # Helper functions for debugging
+    def set_to_turn(self, obs, conf, turn: int) -> NoReturn:
+        self.game_state.turn = turn - 1
+        self(obs, conf)
 
 
 def agent(obs, conf) -> List[str]:

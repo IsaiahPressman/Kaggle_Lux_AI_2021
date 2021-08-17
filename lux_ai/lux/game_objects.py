@@ -14,8 +14,10 @@ class Player:
         self.units: list[Unit] = []
         self.cities: Dict[str, City] = {}
         self.city_tile_count = 0
+
     def researched_coal(self) -> bool:
         return self.research_points >= GAME_CONSTANTS["PARAMETERS"]["RESEARCH_REQUIREMENTS"]["COAL"]
+
     def researched_uranium(self) -> bool:
         return self.research_points >= GAME_CONSTANTS["PARAMETERS"]["RESEARCH_REQUIREMENTS"]["URANIUM"]
 
@@ -27,10 +29,12 @@ class City:
         self.fuel = fuel
         self.citytiles: list[CityTile] = []
         self.light_upkeep = light_upkeep
+
     def _add_city_tile(self, x, y, cooldown):
         ct = CityTile(self.team, self.cityid, x, y, cooldown)
         self.citytiles.append(ct)
         return ct
+
     def get_light_upkeep(self):
         return self.light_upkeep
 
@@ -41,26 +45,39 @@ class CityTile:
         self.team = teamid
         self.pos = Position(x, y)
         self.cooldown = cooldown
+
     def can_act(self) -> bool:
         """
         Whether or not this unit can research or build
         """
         return self.cooldown < 1
+
     def research(self) -> str:
         """
         returns command to ask this tile to research this turn
         """
         return "r {} {}".format(self.pos.x, self.pos.y)
+
     def build_worker(self) -> str:
         """
         returns command to ask this tile to build a worker this turn
         """
         return "bw {} {}".format(self.pos.x, self.pos.y)
+
     def build_cart(self) -> str:
         """
         returns command to ask this tile to build a cart this turn
         """
         return "bc {} {}".format(self.pos.x, self.pos.y)
+
+    def __str__(self):
+        return f"CityTile: {self.pos}"
+
+    def __hash__(self):
+        return hash(str(self))
+
+    def __eq__(self, other):
+        return isinstance(other, CityTile) and self.pos == other.pos
 
 
 class Cargo:
@@ -84,6 +101,7 @@ class Unit:
         self.cargo.wood = wood
         self.cargo.coal = coal
         self.cargo.uranium = uranium
+
     def is_worker(self) -> bool:
         return self.type == UNIT_TYPES.WORKER
 
@@ -99,13 +117,14 @@ class Unit:
             return GAME_CONSTANTS["PARAMETERS"]["RESOURCE_CAPACITY"]["WORKER"] - spaceused
         else:
             return GAME_CONSTANTS["PARAMETERS"]["RESOURCE_CAPACITY"]["CART"] - spaceused
-    
+
     def can_build(self, game_map) -> bool:
         """
         whether or not the unit can build where it is right now
         """
         cell = game_map.get_cell_by_pos(self.pos)
-        if not cell.has_resource() and self.can_act() and (self.cargo.wood + self.cargo.coal + self.cargo.uranium) >= GAME_CONSTANTS["PARAMETERS"]["CITY_BUILD_COST"]:
+        if not cell.has_resource() and self.can_act() and (self.cargo.wood + self.cargo.coal + self.cargo.uranium) >= \
+                GAME_CONSTANTS["PARAMETERS"]["CITY_BUILD_COST"]:
             return True
         return False
 
@@ -138,3 +157,12 @@ class Unit:
         return the command to pillage whatever is underneath the worker
         """
         return "p {}".format(self.id)
+
+    def __str__(self):
+        return f"Unit: team_{self.team} - type_{self.type} - pos_{self.pos}"
+
+    def __hash__(self):
+        return hash(self.id)
+
+    def __eq__(self, other):
+        return isinstance(other, Unit) and self.id == other.id
