@@ -3,9 +3,9 @@ import numpy as np
 import math
 from typing import *
 
-from . import utils
+from . import map_processing, utils
 from .actions import Action
-from .constants import LOCAL_EVAL, DIRECTIONS, MAX_RESEARCH, RESOURCE_TYPES
+from .utility_constants import LOCAL_EVAL, DAY_LEN, NIGHT_LEN, DN_CYCLE_LEN, MAX_RESEARCH
 from ..lux_ai.lux.constants import Constants
 from ..lux_ai.lux.game import Game
 from ..lux_ai.lux.game_constants import GAME_CONSTANTS
@@ -30,19 +30,22 @@ class Agent:
         self.w, self.h = self.game_state.map.width, self.game_state.map.height
 
         self.all_cities_mat = np.zeros((2, self.w, self.h), dtype=bool)
-        self.all_mobile_units_mat = np.zeros((2, self.w, self.h), dtype=bool)
-        self.all_immobile_units_mat = np.zeros((2, self.w, self.h), dtype=bool)
+        self.all_mobile_units_mat = np.zeros_like(self.all_cities_mat)
+        self.all_immobile_units_mat = np.zeros_like(self.all_cities_mat)
 
         self.road_mat = np.zeros((self.w, self.h), dtype=float)
 
         self.wood_mat = np.zeros((self.w, self.h), dtype=float)
-        self.coal_mat = np.zeros((self.w, self.h), dtype=float)
-        self.uranium_mat = np.zeros((self.w, self.h), dtype=float)
+        self.coal_mat = np.zeros_like(self.wood_mat)
+        self.uranium_mat = np.zeros_like(self.wood_mat)
 
         self.city_tile_actions: Dict[CityTile, List[Action]] = {}
         self.worker_actions: Dict[Unit, List[Action]] = {}
         self.cart_actions: Dict[Unit, List[Action]] = {}
         self.debug_actions: List[Action] = []
+
+        self.resource_per_second_mat = np.zeros((self.w, self.h), dtype=float)
+        self.fuel_per_second_mat = np.zeros_like(self.resource_per_second_mat)
 
     def __call__(self, obs, conf) -> List[str]:
         self.reset(obs, conf)
@@ -50,6 +53,7 @@ class Agent:
 
         self.update_strategy()
         self.assign_city_tile_actions()
+        self.assign_unit_duties()
         self.assign_unit_actions()
 
         self.debug_actions.append(Action(actor=self.me, action_str=annotate.sidetext(f"Turn: {self.game_state.turn}")))
@@ -91,11 +95,11 @@ class Agent:
             x, y = cell.pos.x, cell.pos.y
             self.road_mat[x, y] = cell.road
             if cell.has_resource():
-                if cell.resource.type == RESOURCE_TYPES.WOOD:
+                if cell.resource.type == Constants.RESOURCE_TYPES.WOOD:
                     self.wood_mat[x, y] = cell.resource.amount
-                elif cell.resource.type == RESOURCE_TYPES.COAL:
+                elif cell.resource.type == Constants.RESOURCE_TYPES.COAL:
                     self.coal_mat[x, y] = cell.resource.amount
-                elif cell.resource.type == RESOURCE_TYPES.URANIUM:
+                elif cell.resource.type == Constants.RESOURCE_TYPES.URANIUM:
                     self.uranium_mat[x, y] = cell.resource.amount
                 else:
                     raise ValueError(f"Unrecognized resource type: {cell.resource.type}")
@@ -126,6 +130,9 @@ class Agent:
                 research_remaining -= 1
             elif city_tile not in self.city_tile_actions:
                 self.city_tile_actions[city_tile] = []
+
+    def assign_unit_duties(self) -> NoReturn:
+
 
     def assign_unit_actions(self) -> NoReturn:
         for unit in self.me.units:
@@ -197,6 +204,20 @@ class Agent:
     @property
     def opp_available_mat(self) -> np.ndarray:
         return ~self.all_immobile_units_mat.any(axis=0) | self.opp_cities_mat
+
+    @property
+    def turns_until_night(self) -> int:
+        return max(DAY_LEN - (self.game_state.turn % DN_CYCLE_LEN), 0)
+
+    @property
+    def turns_until_day(self) -> int:
+        if not self.is_night:
+            return 0
+        return max(NIGHT_LEN - (self.game_state.turn % DN_CYCLE_LEN - 30), 0)
+
+    @property
+    def is_night(self) -> bool:
+        return self.game_state.turn % DN_CYCLE_LEN >= DAY_LEN
 
 
 def agent(obs, conf) -> List[str]:

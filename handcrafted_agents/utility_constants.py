@@ -1,0 +1,11 @@
+import getpass
+
+from ..lux_ai.lux.game_constants import GAME_CONSTANTS
+
+USER = getpass.getuser()
+LOCAL_EVAL = USER in ['isaiah']
+
+DAY_LEN = GAME_CONSTANTS["PARAMETERS"]["DAY_LENGTH"]
+NIGHT_LEN = GAME_CONSTANTS["PARAMETERS"]["NIGHT_LENGTH"]
+DN_CYCLE_LEN = DAY_LEN + NIGHT_LEN
+MAX_RESEARCH = max(GAME_CONSTANTS["PARAMETERS"]["RESEARCH_REQUIREMENTS"].values())

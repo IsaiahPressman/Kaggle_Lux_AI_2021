@@ -37,6 +37,10 @@ if __name__ == "__main__":
         if step == 0:
             player_id = int(observation["updates"][0])
             observation.player = player_id
+            """
+            # fixes bug where updates array is shared, but the first update is agent dependent actually
+            observation["updates"][0] = f"{observation.player}"
+            """
         if inputs == "D_DONE":
             actions = agent(observation, None)
             observation["updates"] = []

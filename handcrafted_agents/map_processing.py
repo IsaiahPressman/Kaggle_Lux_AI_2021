@@ -1,7 +1,7 @@
 import numpy as np
 from scipy import ndimage
 
-from .constants import RESOURCE_TYPES
+from .utility_constants import RESOURCE_TYPES
 from ..lux_ai.lux.game_constants import GAME_CONSTANTS
 
 
