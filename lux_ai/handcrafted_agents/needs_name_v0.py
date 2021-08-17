@@ -1,17 +1,14 @@
 import itertools
 import numpy as np
-import math
 from typing import *
 
-from . import map_processing, utils
+from . import map_processing, duties, utils
 from .actions import Action
 from .utility_constants import LOCAL_EVAL, DAY_LEN, NIGHT_LEN, DN_CYCLE_LEN, MAX_RESEARCH
-from ..lux_ai.lux.constants import Constants
-from ..lux_ai.lux.game import Game
-from ..lux_ai.lux.game_constants import GAME_CONSTANTS
-from ..lux_ai.lux.game_objects import CityTile, Unit, Player
-from ..lux_ai.lux.game_map import Cell
-from ..lux_ai.lux import annotate
+from ..lux.constants import Constants
+from ..lux.game import Game
+from ..lux.game_objects import CityTile, Unit
+from ..lux import annotate
 
 
 AGENT = None
@@ -23,7 +20,6 @@ class Agent:
         # Do not edit
         self.game_state = self.game_state = Game()
         self.game_state._initialize(obs["updates"])
-        self.game_state._update(obs["updates"][2:])
 
         self.me = self.game_state.players[obs.player]
         self.opp = self.game_state.players[(obs.player + 1) % 2]
@@ -39,24 +35,29 @@ class Agent:
         self.coal_mat = np.zeros_like(self.wood_mat)
         self.uranium_mat = np.zeros_like(self.wood_mat)
 
+        self.duties: List[duties.Duty] = []
         self.city_tile_actions: Dict[CityTile, List[Action]] = {}
         self.worker_actions: Dict[Unit, List[Action]] = {}
         self.cart_actions: Dict[Unit, List[Action]] = {}
-        self.debug_actions: List[Action] = []
+        self.debug_actions: List[str] = []
 
         self.resource_per_second_mat = np.zeros((self.w, self.h), dtype=float)
         self.fuel_per_second_mat = np.zeros_like(self.resource_per_second_mat)
+        self.smoothed_rps_mats: List[np.ndarray] = []
+        self.smoothed_fps_mats: List[np.ndarray] = []
 
     def __call__(self, obs, conf) -> List[str]:
         self.reset(obs, conf)
         self.preprocess()
 
         self.update_strategy()
-        self.assign_city_tile_actions()
         self.assign_unit_duties()
+        # TODO: low priority - assign_city_tile_duties?
+        self.assign_city_tile_actions()
         self.assign_unit_actions()
+        self.resolve_actions()
 
-        self.debug_actions.append(Action(actor=self.me, action_str=annotate.sidetext(f"Turn: {self.game_state.turn}")))
+        self.debug_actions.append(annotate.sidetext(f"Turn: {self.game_state.turn}"))
         return self.get_actions()
 
     # noinspection PyProtectedMember
@@ -91,6 +92,10 @@ class Agent:
                 mat[p_id, unit.pos.x, unit.pos.y] = True
 
         # Fill the road and resource matrices
+        self.road_mat[:] = 0
+        self.wood_mat[:] = 0
+        self.coal_mat[:] = 0
+        self.uranium_mat[:] = 0
         for cell in itertools.chain(*self.game_state.map.map):
             x, y = cell.pos.x, cell.pos.y
             self.road_mat[x, y] = cell.road
@@ -104,8 +109,64 @@ class Agent:
                 else:
                     raise ValueError(f"Unrecognized resource type: {cell.resource.type}")
 
+        # Clear other matrices
+        self.resource_per_second_mat[:] = 0
+        self.fuel_per_second_mat[:] = 0
+        self.smoothed_rps_mats = []
+        self.smoothed_fps_mats = []
+
     def preprocess(self) -> NoReturn:
-        pass
+        # TODO: medium priority - tune and hyperpameterize time_horizon
+        time_horizon = 2
+        # TODO: low priority - tune and hyperpameterize n_iter_smoothing
+        n_iter_smoothing = 5
+
+        self.resource_per_second_mat += map_processing.get_resource_per_second_mat(
+            self.wood_mat,
+            Constants.RESOURCE_TYPES.WOOD,
+            time_horizon=time_horizon
+        )
+        # TODO: low priority - add coal/uranium to rps/fps mats when research is near completion?
+        if self.me.researched_coal():
+            self.resource_per_second_mat += map_processing.get_resource_per_second_mat(
+                self.coal_mat,
+                Constants.RESOURCE_TYPES.COAL,
+                time_horizon=time_horizon
+            )
+        if self.me.researched_uranium():
+            self.resource_per_second_mat += map_processing.get_resource_per_second_mat(
+                self.uranium_mat,
+                Constants.RESOURCE_TYPES.URANIUM,
+                time_horizon=time_horizon
+            )
+        self.smoothed_rps_mats = [self.resource_per_second_mat]
+        for _ in range(n_iter_smoothing):
+            self.smoothed_rps_mats.append(map_processing.smooth_mining_heatmap(
+                self.smoothed_rps_mats[-1]
+            ))
+
+        self.fuel_per_second_mat += map_processing.get_fuel_per_second_mat(
+            self.wood_mat,
+            Constants.RESOURCE_TYPES.WOOD,
+            time_horizon=time_horizon
+        )
+        if self.me.researched_coal():
+            self.fuel_per_second_mat += map_processing.get_fuel_per_second_mat(
+                self.coal_mat,
+                Constants.RESOURCE_TYPES.COAL,
+                time_horizon=time_horizon
+            )
+        if self.me.researched_uranium():
+            self.fuel_per_second_mat += map_processing.get_fuel_per_second_mat(
+                self.uranium_mat,
+                Constants.RESOURCE_TYPES.URANIUM,
+                time_horizon=time_horizon
+            )
+        self.smoothed_fps_mats = [self.fuel_per_second_mat]
+        for _ in range(n_iter_smoothing):
+            self.smoothed_fps_mats.append(map_processing.smooth_mining_heatmap(
+                self.smoothed_fps_mats[-1]
+            ))
 
     def update_strategy(self) -> NoReturn:
         pass
@@ -132,11 +193,36 @@ class Agent:
                 self.city_tile_actions[city_tile] = []
 
     def assign_unit_duties(self) -> NoReturn:
+        self.duties = []
+        self.duties.append(duties.MineFuelLocal(
+                units=self.me.units,
+                priority=0.,
+                target_city=list(self.me.cities.values())[0],  # TODO
+                target_fuel=100_000,  # TODO
+            ))
 
+        all_units = set(self.me.units)
+        assigned_units = set(u for d in self.duties for u in d.units)
+        utils.RUNTIME_ASSERT(
+            all_units == assigned_units,
+            f"Not all units were assigned a Duty: {all_units.symmetric_difference(assigned_units)}"
+        )
+        for duty in self.duties:
+            duty.validate()
 
     def assign_unit_actions(self) -> NoReturn:
-        for unit in self.me.units:
-            raise NotImplementedError
+        for duty in self.duties:
+            for act_prefs in duty.get_action_preferences(
+                    available_mat=self.my_available_mat,
+                    smoothed_rps_mats=self.smoothed_rps_mats,
+                    smoothed_fps_mats=self.smoothed_fps_mats,
+            ).values():
+                for act in act_prefs:
+                    self.add_action(act)
+
+    def resolve_actions(self) -> NoReturn:
+        # TODO: high priority
+        pass
 
     # Utility functions and properties here:
     def add_action(self, action: Action) -> NoReturn:
@@ -155,21 +241,19 @@ class Agent:
 
     def get_actions(self) -> List[str]:
         actions = []
-        for actor, act_list in dict(
+        for actor, act_list in {
                 **self.city_tile_actions,
                 **self.worker_actions,
                 **self.cart_actions
-        ).items():
+        }.items():
             if act_list:
                 actions.append(act_list[0].action_str)
+                self.debug_actions.extend(act_list[0].get_debug_strs())
             else:
-                self.debug_actions.append(Action(
-                    actor=actor,
-                    action_str=annotate.text(actor.pos.x, actor.pos.y, f"{actor}: NO-OP")
-                ))
+                self.debug_actions.append(annotate.text(actor.pos.x, actor.pos.y, f"{actor}: NO-OP"))
 
         if LOCAL_EVAL:
-            actions.extend([a.action_str for a in self.debug_actions])
+            actions.extend(self.debug_actions)
 
         return actions
 
@@ -199,11 +283,11 @@ class Agent:
 
     @property
     def my_available_mat(self) -> np.ndarray:
-        return ~self.all_immobile_units_mat.any(axis=0) | self.my_cities_mat
+        return self.my_cities_mat | (~(self.all_immobile_units_mat.any(axis=0)) & ~self.opp_cities_mat)
 
     @property
     def opp_available_mat(self) -> np.ndarray:
-        return ~self.all_immobile_units_mat.any(axis=0) | self.opp_cities_mat
+        return self.opp_cities_mat | (~(self.all_immobile_units_mat.any(axis=0)) & ~self.my_cities_mat)
 
     @property
     def turns_until_night(self) -> int:
@@ -218,6 +302,11 @@ class Agent:
     @property
     def is_night(self) -> bool:
         return self.game_state.turn % DN_CYCLE_LEN >= DAY_LEN
+
+    # Helper functions for debugging
+    def set_to_turn(self, obs, conf, turn: int) -> NoReturn:
+        self.game_state.turn = turn - 1
+        return self(obs, conf)
 
 
 def agent(obs, conf) -> List[str]:

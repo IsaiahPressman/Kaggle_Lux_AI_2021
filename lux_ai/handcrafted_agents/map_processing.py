@@ -1,8 +1,10 @@
+import sys
+
 import numpy as np
 from scipy import ndimage
 
-from .utility_constants import RESOURCE_TYPES
-from ..lux_ai.lux.game_constants import GAME_CONSTANTS
+from ..lux.constants import Constants
+from ..lux.game_constants import GAME_CONSTANTS
 
 
 def _get_resource_per_second(resource: str) -> float:
@@ -53,8 +55,18 @@ def get_fuel_per_second_mat(
     return ndimage.convolve(resource_mat_normalized, FUEL_PER_SECOND_KERNELS[resource], mode="constant", cval=0.)
 
 
+def smooth_mining_heatmap(
+        mining_per_second_mat: np.ndarray,
+        n_iter: int = 1
+):
+    assert n_iter > 0
+    for i in range(n_iter):
+        mining_per_second_mat = ndimage.convolve(mining_per_second_mat, SMOOTHING_KERNEL, mode="constant", cval=0.)
+    return mining_per_second_mat
+
+
 RESOURCE_PER_SECOND = {
-    r: _get_resource_per_second(r) for r in RESOURCE_TYPES
+    r: _get_resource_per_second(r) for r in Constants.RESOURCE_TYPES.astuple()
 }
 RESOURCE_PER_SECOND_KERNELS = {
     r: np.array([[0., rps, 0.],
@@ -63,7 +75,7 @@ RESOURCE_PER_SECOND_KERNELS = {
     for r, rps in RESOURCE_PER_SECOND.items()
 }
 FUEL_PER_SECOND = {
-    r: _get_fuel_per_second(r) for r in RESOURCE_TYPES
+    r: _get_fuel_per_second(r) for r in Constants.RESOURCE_TYPES.astuple()
 }
 FUEL_PER_SECOND_KERNELS = {
     r: np.array([[0., fps, 0.],
@@ -71,3 +83,7 @@ FUEL_PER_SECOND_KERNELS = {
                  [0., fps, 0.]])
     for r, fps in FUEL_PER_SECOND.items()
 }
+SMOOTHING_KERNEL = np.array([[0., 1., 0.],
+                             [1., 1., 1.],
+                             [0., 1., 0.]])
+SMOOTHING_KERNEL = SMOOTHING_KERNEL / SMOOTHING_KERNEL.sum()

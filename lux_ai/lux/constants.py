@@ -18,17 +18,17 @@ class Constants:
         CENTER = "c"
 
         @staticmethod
-        def astuple(move_only: bool = True):
+        def astuple(include_center: bool):
             move_directions = (
                 Constants.DIRECTIONS.NORTH,
                 Constants.DIRECTIONS.EAST,
                 Constants.DIRECTIONS.SOUTH,
                 Constants.DIRECTIONS.WEST
             )
-            if move_only:
-                return move_directions
-            else:
+            if include_center:
                 return move_directions + (Constants.DIRECTIONS.CENTER,)
+            else:
+                return move_directions
 
     # noinspection PyPep8Naming
     class UNIT_TYPES:

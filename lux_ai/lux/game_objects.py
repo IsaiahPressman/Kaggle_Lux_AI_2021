@@ -38,6 +38,12 @@ class City:
     def get_light_upkeep(self):
         return self.light_upkeep
 
+    def __str__(self):
+        return self.cityid
+
+    def __repr__(self):
+        return f"City: {str(self)}"
+
 
 class CityTile:
     def __init__(self, teamid, cityid, x, y, cooldown):
@@ -73,11 +79,14 @@ class CityTile:
     def __str__(self):
         return f"CityTile: {self.pos}"
 
+    def __repr__(self):
+        return str(self)
+
     def __hash__(self):
-        return hash(str(self))
+        return hash(f"{self.cityid}_{self.pos}")
 
     def __eq__(self, other):
-        return isinstance(other, CityTile) and self.pos == other.pos
+        return isinstance(other, CityTile) and self.pos == other.pos and self.cityid == other.cityid
 
 
 class Cargo:
@@ -159,7 +168,10 @@ class Unit:
         return "p {}".format(self.id)
 
     def __str__(self):
-        return f"Unit: team_{self.team} - type_{self.type} - pos_{self.pos}"
+        return f"Unit: team_{self.team}/type_{self.type}/pos_{self.pos}"
+
+    def __repr__(self):
+        return str(self)
 
     def __hash__(self):
         return hash(self.id)
