@@ -442,13 +442,11 @@ class _FixedShapeEmbeddingObsWrapper(gym.Wrapper):
             for city in player.cities.values():
                 # NB: This doesn't technically register the light upkeep of a given city tile, but instead
                 # the average light cost of every tile in the given city
-                city_fuel = city.fuel / len(city.citytiles)
-                city_light_cost = city.light_upkeep / len(city.citytiles)
                 for city_tile in city.citytiles:
                     x, y = city_tile.pos.x, city_tile.pos.y
                     obs["city_tile"][0, p_id, x, y] = 1
                     obs["city_tile_nights_of_fuel"][0, p_id, x, y] = min(
-                        city_fuel // city_light_cost,
+                        city.fuel // city.light_upkeep,
                         20
                     )
                     # Equivalent to:

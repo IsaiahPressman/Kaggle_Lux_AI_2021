@@ -93,28 +93,27 @@ class LuxEnv(gym.Env):
         self.pos_to_city_tile_dict = {}
         self.reset_count = 0
 
-        self.dimension_process = None
+        self._dimension_process = None
         self._q = None
         self._t = None
         self._restart_dimension_process()
 
     def _restart_dimension_process(self) -> NoReturn:
-        if self.dimension_process is not None:
-            self.dimension_process.kill()
+        if self._dimension_process is not None:
+            self._dimension_process.kill()
         if self.run_game_automatically:
             # 1.1: Initialize dimensions in the background
-            self.dimension_process = Popen(
+            self._dimension_process = Popen(
                 ["node", str(Path(DIR_PATH) / "dimensions/main.js")],
                 stdin=PIPE,
                 stdout=PIPE,
                 stderr=PIPE
             )
-            # following 4 lines from https://stackoverflow.com/questions/375427/a-non-blocking-read-on-a-subprocess-pipe-in-python
             self._q = Queue()
-            self._t = Thread(target=_enqueue_output, args=(self.dimension_process.stdout, self._q))
-            self._t.daemon = True  # thread dies with the program
+            self._t = Thread(target=_enqueue_output, args=(self._dimension_process.stdout, self._q))
+            self._t.daemon = True
             self._t.start()
-            # atexit.register(_cleanup_dimensions_factory(self.dimension_process))
+            # atexit.register(_cleanup_dimensions_factory(self._dimension_process))
 
     def reset(self, observation_updates: Optional[list[str]] = None) -> tuple[Game, tuple[float, float], bool, dict]:
         self.game_state = Game()
@@ -130,11 +129,11 @@ class LuxEnv(gym.Env):
                 "agent_names": [],  # unsure if this is provided?
                 "config": self.configuration
             }
-            self.dimension_process.stdin.write((json.dumps(initiate) + "\n").encode())
-            self.dimension_process.stdin.flush()
-            agent1res = json.loads(self.dimension_process.stderr.readline())
+            self._dimension_process.stdin.write((json.dumps(initiate) + "\n").encode())
+            self._dimension_process.stdin.flush()
+            agent1res = json.loads(self._dimension_process.stderr.readline())
             # Skip agent2res and match_obs_meta
-            _ = self.dimension_process.stderr.readline(), self.dimension_process.stderr.readline()
+            _ = self._dimension_process.stderr.readline(), self._dimension_process.stderr.readline()
 
             self.game_state._initialize(agent1res)
             self.game_state._update(agent1res[2:])
@@ -191,17 +190,17 @@ class LuxEnv(gym.Env):
         assert len(action) == 2
         # TODO: Does dimension process state need to include info other than actions?
         state = [{'action': a} for a in action]
-        self.dimension_process.stdin.write((json.dumps(state) + "\n").encode())
-        self.dimension_process.stdin.flush()
+        self._dimension_process.stdin.write((json.dumps(state) + "\n").encode())
+        self._dimension_process.stdin.flush()
 
         # 3.1 : Receive and parse the observations returned by dimensions via stdout
-        agent1res = json.loads(self.dimension_process.stderr.readline())
+        agent1res = json.loads(self._dimension_process.stderr.readline())
         # Skip agent2res and match_obs_meta
-        _ = self.dimension_process.stderr.readline(), self.dimension_process.stderr.readline()
+        _ = self._dimension_process.stderr.readline(), self._dimension_process.stderr.readline()
         self.game_state._update(agent1res)
 
         # Check if done
-        match_status = json.loads(self.dimension_process.stderr.readline())
+        match_status = json.loads(self._dimension_process.stderr.readline())
         self.done = match_status["status"] == "finished"
 
         while True:

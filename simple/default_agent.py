@@ -47,6 +47,7 @@ def agent(observation, configuration):
                 resource_tiles.append(cell)
 
     cities_to_build = 0
+    units_to_build = player.city_tile_count - len(player.units)
     for k, city in player.cities.items():
         if city.fuel > city.get_light_upkeep() * GAME_CONSTANTS["PARAMETERS"]["NIGHT_LENGTH"] + 1000:
             # if our city has enough fuel to survive the whole night and 1000 extra fuel,
@@ -54,10 +55,11 @@ def agent(observation, configuration):
             cities_to_build += 1
         for citytile in city.citytiles:
             if citytile.can_act():
-                # you can use the following to get the citytile to research or build a worker
-                # actions.append(citytile.research());
-                # actions.append(citytile.buildWorker());
-                pass
+                if units_to_build > 0:
+                    actions.append(citytile.build_worker())
+                    units_to_build -= 1
+                else:
+                    actions.append(citytile.research())
 
     # we iterate over all our units and do something with them
     for unit in player.units:
