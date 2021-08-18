@@ -59,9 +59,21 @@ class MineFuelLocal(Duty):
                 new_pos = unit.pos.translate(d, 1)
                 if in_bounds(new_pos, available_mat.shape) and available_mat[new_pos.x, new_pos.y]:
                     act_to_dist[d] = min(new_pos.distance_to(ct.pos) for ct in self.target_city.citytiles)
+            act_to_fps = {}
+            for d in Constants.DIRECTIONS.astuple(include_center=True):
+                new_pos = unit.pos.translate(d, 1)
+                if (
+                        in_bounds(new_pos, available_mat.shape) and
+                        available_mat[new_pos.x, new_pos.y] and
+                        # Workers are not allowed to stray too far from the city for local mining
+                        act_to_dist[d] <= 8
+                ):
+                    act_to_fps[d] = smoothed_fps_mats[0][new_pos.x, new_pos.y]
 
-            cargo_space_if_noop = unit.get_cargo_space_left() - smoothed_rps_mats[0][unit.pos.x, unit.pos.y]
-            if cargo_space_if_noop <= max(COLLECTION_RATES.values()):
+            # TODO: high priority - change to account for fuel when next taking action + dist_to_city
+            cargo_space_if_noop = unit.get_cargo_space_left() - 2 * smoothed_rps_mats[0][unit.pos.x, unit.pos.y]
+            # If cargo space <= minimum collection rate, we return to the city
+            if unit.get_cargo_space_left() <= min(COLLECTION_RATES.values()):
                 action_preferences[unit] = [
                     Action(
                         actor=unit,
@@ -73,12 +85,16 @@ class MineFuelLocal(Duty):
                         )
                     )
                     # Smaller distances are better, so reverse=False (default)
-                    for i, (d, _) in enumerate(sorted(act_to_dist.items(), key=lambda item: item[1]))
+                    for i, (d, _) in enumerate(sorted(
+                        act_to_dist.items(),
+                        # Tie-break towards no-op
+                        key=lambda item: (item[1], (item[0] == Constants.DIRECTIONS.CENTER) * -1.),
+                    ))
                 ]
+            # If cargo space - 2 * a square equal or closer to the city
             else:
                 # Iteratively work through the smoothed fps matrices until all directions have a non-zero fuel value
-                act_to_fps = {}
-                for fps_mat in smoothed_fps_mats:
+                for fps_mat in smoothed_fps_mats[1:]:
                     for d in Constants.DIRECTIONS.astuple(include_center=True):
                         # Stop if value is already non-zero
                         if act_to_fps.get(d, 0) > 0:
@@ -106,7 +122,12 @@ class MineFuelLocal(Duty):
                         )
                     )
                     # More fuel is better, so reverse=True
-                    for i, (d, fuel) in enumerate(sorted(act_to_fps.items(), key=lambda item: item[1], reverse=True))
+                    for i, (d, fuel) in enumerate(sorted(
+                        act_to_fps.items(),
+                        # Tie-break towards no-op
+                        key=lambda item: (item[1], (item[0] == Constants.DIRECTIONS.CENTER) * 1.),
+                        reverse=True
+                    ))
                 ]
 
         return action_preferences

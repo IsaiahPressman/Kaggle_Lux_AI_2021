@@ -1,3 +1,4 @@
+import copy
 import itertools
 import numpy as np
 from typing import *
@@ -116,7 +117,7 @@ class Agent:
         self.smoothed_fps_mats = []
 
     def preprocess(self) -> NoReturn:
-        # TODO: medium priority - tune and hyperpameterize time_horizon
+        # TODO: low priority - tune and hyperpameterize time_horizon
         time_horizon = 2
         # TODO: low priority - tune and hyperpameterize n_iter_smoothing
         n_iter_smoothing = 5
@@ -193,14 +194,29 @@ class Agent:
                 self.city_tile_actions[city_tile] = []
 
     def assign_unit_duties(self) -> NoReturn:
-        self.duties = []
-        self.duties.append(duties.MineFuelLocal(
-                units=self.me.units,
-                priority=0.,
-                target_city=list(self.me.cities.values())[0],  # TODO
-                target_fuel=100_000,  # TODO
-            ))
+        # First clean up all completed duties
+        for duty in copy.copy(self.duties):
+            if duty.is_complete():
+                self.duties.remove(duty)
+        # Then check for unassigned units
+        unassigned_units = set(self.me.units)
+        for unit in self.me.units:
+            for duty in self.duties:
+                # Replace the unit instance with the new unit instance with the updated unit position
+                if unit in duty.units:
+                    duty.units.remove(unit)
+                    duty.units.add(unit)
+                    unassigned_units.remove(unit)
+        # Create new duties for unassigned units or assign them to existing ones
+        if len(unassigned_units) > 0:
+            self.duties.append(duties.MineFuelLocal(
+                    units=self.me.units,
+                    priority=0.,
+                    target_city=list(self.me.cities.values())[0],  # TODO
+                    target_fuel=100_000,  # TODO
+                ))
 
+        # Finally, perform checks that all units are assigned, and that all duties have the requisite units
         all_units = set(self.me.units)
         assigned_units = set(u for d in self.duties for u in d.units)
         utils.RUNTIME_ASSERT(
