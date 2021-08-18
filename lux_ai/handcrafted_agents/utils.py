@@ -20,6 +20,10 @@ def DEBUG_MESSAGE(msg: str) -> NoReturn:
 
 
 def RUNTIME_ASSERT(statement: bool, msg: str = "") -> NoReturn:
+    """
+    Asserts a statement, but only raises an error during local evaluation.
+    During competition evaluation, instead prints the error to the agent debug logs
+    """
     if statement:
         return
 
