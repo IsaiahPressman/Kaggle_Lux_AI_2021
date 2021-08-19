@@ -1,6 +1,6 @@
 from typing import Dict
 import sys
-from liam_coral import agent
+from debugging_agent import agent
 
 
 if __name__ == "__main__":

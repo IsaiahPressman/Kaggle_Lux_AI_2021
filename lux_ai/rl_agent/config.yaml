@@ -20,10 +20,10 @@ hidden_dim: 128
 normalize: true
 use_index_select: true
 mhsa_heads: 2
-optimizer_class: RMSprop
+optimizer_class: Adam
 optimizer_kwargs:
   lr: 0.0001
-  alpha: 0.9
+  eps: 0.0003125
 min_lr_mod: 0.01
 entropy_cost: 0.001
 baseline_cost: 1.0

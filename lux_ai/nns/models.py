@@ -172,9 +172,13 @@ class BasicActorCriticNetwork(nn.Module):
         actor_layers = []
         baseline_layers = []
         for i in range(n_action_value_layers - 1):
-            actor_layers.append(nn.Conv2d(self.base_out_channels, self.base_out_channels, (1, 1)))
+            actor_layers.append(
+                nn.utils.spectral_norm(nn.Conv2d(self.base_out_channels, self.base_out_channels, (1, 1)))
+            )
             actor_layers.append(actor_critic_activation())
-            baseline_layers.append(nn.Conv2d(self.base_out_channels, self.base_out_channels, (1, 1)))
+            baseline_layers.append(
+                nn.utils.spectral_norm(nn.Conv2d(self.base_out_channels, self.base_out_channels, (1, 1)))
+            )
             baseline_layers.append(actor_critic_activation())
 
         self.actor_base = nn.Sequential(*actor_layers)

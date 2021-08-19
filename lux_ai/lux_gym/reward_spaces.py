@@ -322,7 +322,7 @@ class PunishingExponentialReward(BaseRewardSpace):
         reward = np.where(
             lost_unit_or_city,
             -1.,
-            reward / 100
+            reward / 1000.
         )
 
         return tuple(reward), done or lost_unit_or_city.any()

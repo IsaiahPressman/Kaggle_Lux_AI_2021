@@ -420,7 +420,7 @@ class _FixedShapeEmbeddingObsWrapper(gym.Wrapper):
                     """
 
                     for r, cargo in (WOOD, unit.cargo.wood), (COAL, unit.cargo.coal), (URANIUM, unit.cargo.uranium):
-                        bucket_size = GAME_CONSTANTS["PARAMETERS"]["CITY_WOOD_COST"]
+                        bucket_size = GAME_CONSTANTS["PARAMETERS"]["CITY_BUILD_COST"]
                         obs[f"cart_cargo_{r}"][0, p_id, x, y] = min(
                             cargo // bucket_size,
                             (GAME_CONSTANTS["PARAMETERS"]["RESOURCE_CAPACITY"]["CART"] // bucket_size) - 1
