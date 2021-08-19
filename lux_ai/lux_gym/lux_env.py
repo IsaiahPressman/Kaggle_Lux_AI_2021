@@ -4,7 +4,6 @@ import itertools
 import json
 import numpy as np
 from kaggle_environments import make
-from kaggle_environments.envs.lux_ai_2021.lux_ai_2021 import dir_path as DIR_PATH
 import math
 from pathlib import Path
 from queue import Queue, Empty
@@ -12,6 +11,7 @@ import random
 from subprocess import Popen, PIPE
 import sys
 from threading import Thread
+import traceback
 from typing import NoReturn, Optional
 
 from ..lux.game import Game
@@ -19,6 +19,12 @@ from ..lux.game_objects import Unit, CityTile
 from ..lux_gym.act_spaces import BaseActSpace, ACTION_MEANINGS
 from ..lux_gym.obs_spaces import BaseObsSpace, MAX_BOARD_SIZE
 from ..lux_gym.reward_spaces import GameResultReward
+
+# In case dir_path is removed in production environment
+try:
+    from kaggle_environments.envs.lux_ai_2021.lux_ai_2021 import dir_path as DIR_PATH
+except Exception:
+    DIR_PATH = None
 
 
 """

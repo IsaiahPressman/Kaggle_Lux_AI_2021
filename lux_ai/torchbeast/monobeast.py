@@ -292,7 +292,7 @@ def learn(
                     actions_taken_mask
                 )
                 combined_learner_entropy = combined_learner_entropy + learner_policy_entropy
-                entropies[act_space] = (reduce(
+                entropies[act_space] = -(reduce(
                     learner_policy_entropy,
                     reduction="sum"
                 ) / actions_taken_mask.sum()).detach().cpu().item()
