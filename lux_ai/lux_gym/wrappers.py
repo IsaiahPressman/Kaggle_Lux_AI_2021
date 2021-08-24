@@ -9,9 +9,9 @@ from .obs_spaces import MAX_BOARD_SIZE, SUBTASK_ENCODING
 from .reward_spaces import BaseRewardSpace, Subtask
 
 
-class PadEnv(gym.Wrapper):
+class PadFixedShapeEnv(gym.Wrapper):
     def __init__(self, env: gym.Env, max_board_size: tuple[int, int] = MAX_BOARD_SIZE):
-        super(PadEnv, self).__init__(env)
+        super(PadFixedShapeEnv, self).__init__(env)
         self.max_board_size = max_board_size
         self.observation_space = self.unwrapped.obs_space.get_obs_spec(max_board_size)
         self.input_mask = np.zeros((1,) + max_board_size, dtype=bool)
@@ -41,7 +41,7 @@ class PadEnv(gym.Wrapper):
         return info
 
     def reset(self, **kwargs):
-        obs, reward, done, info = super(PadEnv, self).reset(**kwargs)
+        obs, reward, done, info = super(PadFixedShapeEnv, self).reset(**kwargs)
         self.input_mask[:] = 0
         self.input_mask[:, :self.orig_board_dims[0], :self.orig_board_dims[1]] = 1
         return self.observation(obs), reward, done, self.info(info)
@@ -50,7 +50,7 @@ class PadEnv(gym.Wrapper):
         action = {
             key: val[..., :self.orig_board_dims[0], :self.orig_board_dims[1]] for key, val in action.items()
         }
-        obs, reward, done, info = super(PadEnv, self).step(action)
+        obs, reward, done, info = super(PadFixedShapeEnv, self).step(action)
         return self.observation(obs), reward, done, self.info(info)
 
     @property

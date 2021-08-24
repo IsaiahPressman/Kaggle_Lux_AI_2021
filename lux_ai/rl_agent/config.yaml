@@ -1,32 +1,33 @@
 name: null
 project: Lux_AI_2021
 entity: isaiahpressman
-group: attention
+group: conv
 act_space: BasicActionSpace
-obs_space: FixedShapeEmbeddingObs
+obs_space: FixedShapeContinuousObs
 obs_space_kwargs:
   include_subtask_encoding: false
-reward_space: PunishingExponentialReward
-reward_space_kwargs: {}
+reward_space: StatefulMultiReward
+reward_space_kwargs:
+  step: 0.005
 total_steps: 100000000.0
 num_actors: 2
 n_actor_envs: 16
 unroll_length: 16
 batch_size: 4
-discounting: 0.99
-model_arch: attention_model
+discounting: 0.999
+model_arch: conv_model
 n_blocks: 4
 hidden_dim: 128
-normalize: true
+normalize: false
 use_index_select: true
-mhsa_heads: 2
+kernel_size: 5
 optimizer_class: Adam
 optimizer_kwargs:
-  lr: 0.0001
-  eps: 0.0003125
+  lr: 0.0002
+  eps: 0.0003
 min_lr_mod: 0.01
 entropy_cost: 0.001
-baseline_cost: 1.0
+baseline_cost: 2.0
 lmb: 0.8
 reduction: sum
 actor_device: cuda:1

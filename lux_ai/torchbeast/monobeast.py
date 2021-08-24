@@ -468,6 +468,8 @@ def train(flags):
     learner_model = learner_model.share_memory()
     if not flags.disable_wandb:
         wandb.watch(learner_model, flags.model_log_freq, log="all", log_graph=True)
+    n_trainable_params = sum(p.numel() for p in learner_model.parameters() if p.requires_grad)
+    logging.info(f'Training model with {n_trainable_params:,d} parameters.')
 
     optimizer = flags.optimizer_class(
         learner_model.parameters(),
