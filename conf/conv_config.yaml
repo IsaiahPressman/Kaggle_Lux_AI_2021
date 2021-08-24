@@ -20,7 +20,7 @@ obs_space_kwargs:
 reward_space: StatefulMultiReward
 reward_space_kwargs:
   #early_stop: True
-  negative_weight: 1.1
+  negative_weight: 1.01
   #research: 0.01
   #fuel: 0.
   game_result: 50.
