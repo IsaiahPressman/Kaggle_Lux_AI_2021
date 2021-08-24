@@ -190,7 +190,8 @@ class StatefulMultiReward(FullGameRewardSpace):
             "city": new_city_count - self.city_count,
             "unit": new_unit_count - self.unit_count,
             "research": new_research_points - self.research_points,
-            "fuel": new_total_fuel - self.total_fuel,
+            # Don't penalize losing fuel at night
+            "fuel": np.maximum(new_total_fuel - self.total_fuel, 0),
             "full_workers": np.array([
                 sum(unit.get_cargo_space_left() > 0 for unit in player.units if unit.is_worker())
                 for player in game_state.players
@@ -321,8 +322,8 @@ class PunishingExponentialReward(BaseRewardSpace):
         lost_unit_or_city = (city_diff < 0) | (unit_diff < 0)
         reward = np.where(
             lost_unit_or_city,
-            -1.,
-            reward / 1000.
+            -0.1,
+            reward / 1_000.
         )
 
         return tuple(reward), done or lost_unit_or_city.any()

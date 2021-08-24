@@ -12,14 +12,12 @@ from ..lux.game_constants import GAME_CONSTANTS
 WOOD = Constants.RESOURCE_TYPES.WOOD
 COAL = Constants.RESOURCE_TYPES.COAL
 URANIUM = Constants.RESOURCE_TYPES.URANIUM
-# TODO: Verify max resources on launch
 MAX_RESOURCE = {
-    # https://github.com/Lux-AI-Challenge/Lux-Design-2021/blob/master/src/Game/gen.ts#L227
-    WOOD: 400.,
-    # https://github.com/Lux-AI-Challenge/Lux-Design-2021/blob/master/src/Game/gen.ts#L248
-    COAL: 650.,
+    WOOD: GAME_CONSTANTS["PARAMETERS"]["MAX_WOOD_AMOUNT"],
+    # https://github.com/Lux-AI-Challenge/Lux-Design-2021/blob/master/src/Game/gen.ts#L253
+    COAL: 425.,
     # https://github.com/Lux-AI-Challenge/Lux-Design-2021/blob/master/src/Game/gen.ts#L269
-    URANIUM: 600.
+    URANIUM: 350.
 }
 # TODO: Fix max fuel amount
 MAX_FUEL = 30 * 10 * 9
@@ -105,6 +103,9 @@ class FixedShapeContinuousObs(FixedShapeObs):
             f"cart_cargo_{WOOD}": gym.spaces.Box(0., 1., shape=(1, p, x, y)),
             f"cart_cargo_{COAL}": gym.spaces.Box(0., 1., shape=(1, p, x, y)),
             f"cart_cargo_{URANIUM}": gym.spaces.Box(0., 1., shape=(1, p, x, y)),
+            # Whether the worker/cart is full
+            "worker_cargo_full": gym.spaces.MultiBinary((1, p, x, y)),
+            "cart_cargo_full": gym.spaces.MultiBinary((1, p, x, y)),
             # none, city_tile
             "city_tile": gym.spaces.MultiBinary((1, p, x, y)),
             # Normalized from 0-MAX_FUEL
@@ -196,14 +197,17 @@ class _FixedShapeContinuousObsWrapper(gym.Wrapper):
                     obs["worker"][0, p_id, x, y] = 1
                     obs["worker_COUNT"][0, p_id, x, y] += 1
                     obs["worker_cooldown"][0, p_id, x, y] = unit.cooldown / w_cooldown
+                    obs["worker_cargo_full"][0, p_id, x, y] = unit.get_cargo_space_left() == 0
 
                     obs[f"worker_cargo_{WOOD}"][0, p_id, x, y] = unit.cargo.wood / w_capacity
                     obs[f"worker_cargo_{COAL}"][0, p_id, x, y] = unit.cargo.coal / w_capacity
                     obs[f"worker_cargo_{URANIUM}"][0, p_id, x, y] = unit.cargo.uranium / w_capacity
+
                 elif unit.is_cart():
                     obs["cart"][0, p_id, x, y] = 1
                     obs["cart_COUNT"][0, p_id, x, y] += 1
                     obs["cart_cooldown"][0, p_id, x, y] = unit.cooldown / ca_cooldown
+                    obs["cart_cargo_full"][0, p_id, x, y] = unit.get_cargo_space_left() == 0
 
                     obs[f"cart_cargo_{WOOD}"][0, p_id, x, y] = unit.cargo.wood / ca_capacity
                     obs[f"cart_cargo_{COAL}"][0, p_id, x, y] = unit.cargo.coal / ca_capacity
@@ -272,14 +276,17 @@ class FixedShapeEmbeddingObs(FixedShapeObs):
             # 1 channel for each resource for cart and worker cargos
             # 5 buckets: [0, 100], increments of 20, 0-19, 20-39, ..., 80-100
             f"worker_cargo_{WOOD}": gym.spaces.MultiDiscrete(np.zeros((1, p, x, y)) + 5),
-            # 10 buckets: [0, 100], increments of 10, 0-9, 10-19, ..., 90-100
-            f"worker_cargo_{COAL}": gym.spaces.MultiDiscrete(np.zeros((1, p, x, y)) + 10),
-            # 25 buckets: [0, 100], increments of 4, 0-3, 4-7, ..., 96-100
-            f"worker_cargo_{URANIUM}": gym.spaces.MultiDiscrete(np.zeros((1, p, x, y)) + 25),
+            # 20 buckets: [0, 100], increments of 5, 0-4, 5-9, ..., 95-100
+            f"worker_cargo_{COAL}": gym.spaces.MultiDiscrete(np.zeros((1, p, x, y)) + 20),
+            # 50 buckets: [0, 100], increments of 2, 0-1, 2-3, ..., 98-100
+            f"worker_cargo_{URANIUM}": gym.spaces.MultiDiscrete(np.zeros((1, p, x, y)) + 50),
             # 20 buckets for all resources: 0-99, 100-199, ..., 1800-1899, 1900-2000
             f"cart_cargo_{WOOD}": gym.spaces.MultiDiscrete(np.zeros((1, p, x, y)) + 20),
             f"cart_cargo_{COAL}": gym.spaces.MultiDiscrete(np.zeros((1, p, x, y)) + 20),
             f"cart_cargo_{URANIUM}": gym.spaces.MultiDiscrete(np.zeros((1, p, x, y)) + 20),
+            # Whether the worker/cart is full
+            "worker_cargo_full": gym.spaces.MultiBinary((1, p, x, y)),
+            "cart_cargo_full": gym.spaces.MultiBinary((1, p, x, y)),
             # none, city_tile
             "city_tile": gym.spaces.MultiBinary((1, p, x, y)),
             # How many nights this city tile would survive without more fuel [0-20+], increments of 1
@@ -386,6 +393,7 @@ class _FixedShapeEmbeddingObsWrapper(gym.Wrapper):
                         np.linspace(1., 3., 5)
                     )
                     """
+                    obs["worker_cargo_full"][0, p_id, x, y] = unit.get_cargo_space_left() == 0
 
                     for r, cargo in (WOOD, unit.cargo.wood), (COAL, unit.cargo.coal), (URANIUM, unit.cargo.uranium):
                         collection_rate = GAME_CONSTANTS["PARAMETERS"]["WORKER_COLLECTION_RATE"][r.upper()]
@@ -418,6 +426,7 @@ class _FixedShapeEmbeddingObsWrapper(gym.Wrapper):
                         np.linspace(1., 5., 9)
                     )
                     """
+                    obs["cart_cargo_full"][0, p_id, x, y] = unit.get_cargo_space_left() == 0
 
                     for r, cargo in (WOOD, unit.cargo.wood), (COAL, unit.cargo.coal), (URANIUM, unit.cargo.uranium):
                         bucket_size = GAME_CONSTANTS["PARAMETERS"]["CITY_BUILD_COST"]

@@ -38,7 +38,7 @@ class RLAgent:
         reward_space = create_reward_space(self.flags)
         env = wrappers.RewardSpaceWrapper(env, reward_space)
         env = env.obs_space.wrap_env(env, reward_space)
-        env = wrappers.PadEnv(env)
+        env = wrappers.PadFixedShapeEnv(env)
         env = wrappers.VecEnv([env])
         env = wrappers.PytorchEnv(env, self.device)
         env = wrappers.DictEnv(env)
