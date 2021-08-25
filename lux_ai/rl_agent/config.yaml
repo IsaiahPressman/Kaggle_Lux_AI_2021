@@ -1,7 +1,7 @@
 name: null
 project: Lux_AI_2021
 entity: isaiahpressman
-group: conv
+group: attention
 act_space: BasicActionSpace
 obs_space: FixedShapeContinuousObs
 obs_space_kwargs:
@@ -13,14 +13,14 @@ total_steps: 100000000.0
 num_actors: 2
 n_actor_envs: 16
 unroll_length: 16
-batch_size: 4
+batch_size: 2
 discounting: 0.999
-model_arch: conv_model
-n_blocks: 4
+model_arch: attention_model
+n_blocks: 6
 hidden_dim: 128
-normalize: false
+normalize: true
 use_index_select: true
-kernel_size: 5
+mhsa_heads: 2
 optimizer_class: Adam
 optimizer_kwargs:
   lr: 0.0002

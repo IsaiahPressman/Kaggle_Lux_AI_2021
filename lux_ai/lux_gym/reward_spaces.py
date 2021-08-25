@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 import numpy as np
 from scipy.stats import rankdata
-from typing import *
+from typing import Dict, NamedTuple, NoReturn, Tuple
 
 from ..lux.game import Game
 from ..lux.game_constants import GAME_CONSTANTS
@@ -58,10 +58,10 @@ class BaseRewardSpace(ABC):
         pass
 
     @abstractmethod
-    def compute_rewards_and_done(self, game_state: Game, done: bool) -> tuple[tuple[float, float], bool]:
+    def compute_rewards_and_done(self, game_state: Game, done: bool) -> Tuple[Tuple[float, float], bool]:
         pass
 
-    def get_info(self) -> dict[str, np.ndarray]:
+    def get_info(self) -> Dict[str, np.ndarray]:
         return {}
 
 
@@ -71,11 +71,11 @@ class FullGameRewardSpace(BaseRewardSpace):
     """
     A class used for defining a reward space for the full game.
     """
-    def compute_rewards_and_done(self, game_state: Game, done: bool) -> tuple[tuple[float, float], bool]:
+    def compute_rewards_and_done(self, game_state: Game, done: bool) -> Tuple[Tuple[float, float], bool]:
         return self.compute_rewards(game_state, done), done
 
     @abstractmethod
-    def compute_rewards(self, game_state: Game, done: bool) -> tuple[float, float]:
+    def compute_rewards(self, game_state: Game, done: bool) -> Tuple[float, float]:
         pass
 
 
@@ -92,12 +92,12 @@ class GameResultReward(FullGameRewardSpace):
     def __init__(self, early_stop: bool = False):
         self.early_stop = early_stop
 
-    def compute_rewards_and_done(self, game_state: Game, done: bool) -> tuple[tuple[float, float], bool]:
+    def compute_rewards_and_done(self, game_state: Game, done: bool) -> Tuple[Tuple[float, float], bool]:
         if self.early_stop:
             done = done or should_early_stop(game_state)
         return self.compute_rewards(game_state, done), done
 
-    def compute_rewards(self, game_state: Game, done: bool) -> tuple[float, float]:
+    def compute_rewards(self, game_state: Game, done: bool) -> Tuple[float, float]:
         if not done:
             return 0., 0.
 
@@ -125,7 +125,7 @@ class CityTileReward(FullGameRewardSpace):
             only_once=False
         )
 
-    def compute_rewards(self, game_state: Game, done: bool) -> tuple[float, float]:
+    def compute_rewards(self, game_state: Game, done: bool) -> Tuple[float, float]:
         return tuple(count_city_tiles(game_state) / 1024.)
 
 
@@ -175,12 +175,12 @@ class StatefulMultiReward(FullGameRewardSpace):
             raise ValueError(f"Unexpected kwargs: {weight_keys ^ set(self.weights.keys())}")
         self._reset()
 
-    def compute_rewards_and_done(self, game_state: Game, done: bool) -> tuple[tuple[float, float], bool]:
+    def compute_rewards_and_done(self, game_state: Game, done: bool) -> Tuple[Tuple[float, float], bool]:
         if self.early_stop:
             done = done or should_early_stop(game_state)
         return self.compute_rewards(game_state, done), done
 
-    def compute_rewards(self, game_state: Game, done: bool) -> tuple[float, float]:
+    def compute_rewards(self, game_state: Game, done: bool) -> Tuple[float, float]:
         new_city_count = count_city_tiles(game_state)
         new_unit_count = count_units(game_state)
         new_research_points = count_research_points(game_state)
@@ -249,7 +249,7 @@ class ZeroSumStatefulMultiReward(StatefulMultiReward):
             only_once=False
         )
 
-    def compute_rewards(self, game_state: Game, done: bool) -> tuple[float, float]:
+    def compute_rewards(self, game_state: Game, done: bool) -> Tuple[float, float]:
         reward = np.array(super(ZeroSumStatefulMultiReward, self).compute_rewards_and_done(game_state, done))
         return tuple(reward - reward.mean())
 
@@ -286,7 +286,7 @@ class PunishingExponentialReward(BaseRewardSpace):
             raise ValueError(f"Unexpected kwargs: {weight_keys ^ set(self.weights.keys())}")
         self._reset()
 
-    def compute_rewards_and_done(self, game_state: Game, done: bool) -> tuple[tuple[float, float], bool]:
+    def compute_rewards_and_done(self, game_state: Game, done: bool) -> Tuple[Tuple[float, float], bool]:
         new_city_count = count_city_tiles(game_state)
         new_unit_count = count_units(game_state)
         new_research_points = count_research_points(game_state)
@@ -328,7 +328,7 @@ class PunishingExponentialReward(BaseRewardSpace):
 
         return tuple(reward), done or lost_unit_or_city.any()
 
-    def compute_rewards(self, game_state: Game, done: bool) -> tuple[float, float]:
+    def compute_rewards(self, game_state: Game, done: bool) -> Tuple[float, float]:
         raise NotImplementedError
 
     def _reset(self) -> NoReturn:
@@ -356,7 +356,7 @@ class Subtask(BaseRewardSpace, ABC):
             only_once=True
         )
 
-    def compute_rewards_and_done(self, game_state: Game, done: bool) -> tuple[tuple[float, float], bool]:
+    def compute_rewards_and_done(self, game_state: Game, done: bool) -> Tuple[Tuple[float, float], bool]:
         goal_reached = self.completed_task(game_state)
         return tuple(goal_reached.astype(float)), goal_reached.any() or done
 
@@ -437,7 +437,7 @@ class SurviveNNights(Subtask):
         self.city_count = np.empty((2,), dtype=int)
         self.unit_count = np.empty_like(self.city_count)
 
-    def compute_rewards_and_done(self, game_state: Game, done: bool) -> tuple[tuple[float, float], bool]:
+    def compute_rewards_and_done(self, game_state: Game, done: bool) -> Tuple[Tuple[float, float], bool]:
         failed_task = self.failed_task(game_state)
         completed_task = self.completed_task(game_state)
         if failed_task.any():

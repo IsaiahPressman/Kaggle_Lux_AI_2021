@@ -11,8 +11,7 @@ import random
 from subprocess import Popen, PIPE
 import sys
 from threading import Thread
-import traceback
-from typing import NoReturn, Optional
+from typing import Any, Dict, List, NoReturn, Optional, Tuple
 
 from ..lux.game import Game
 from ..lux.game_objects import Unit, CityTile
@@ -42,7 +41,7 @@ def _enqueue_output(out, queue):
     out.close()
 
 
-def _generate_pos_to_unit_dict(game_state: Game) -> dict[tuple, Optional[Unit]]:
+def _generate_pos_to_unit_dict(game_state: Game) -> Dict[Tuple, Optional[Unit]]:
     pos_to_unit_dict = {(cell.pos.x, cell.pos.y): None for cell in itertools.chain(*game_state.map.map)}
     for player in game_state.players:
         for unit in reversed(player.units):
@@ -51,7 +50,7 @@ def _generate_pos_to_unit_dict(game_state: Game) -> dict[tuple, Optional[Unit]]:
     return pos_to_unit_dict
 
 
-def _generate_pos_to_city_tile_dict(game_state: Game) -> dict[tuple, Optional[CityTile]]:
+def _generate_pos_to_city_tile_dict(game_state: Game) -> Dict[Tuple, Optional[CityTile]]:
     pos_to_city_tile_dict = {(cell.pos.x, cell.pos.y): None for cell in itertools.chain(*game_state.map.map)}
     for player in game_state.players:
         for city in player.cities.values():
@@ -61,6 +60,7 @@ def _generate_pos_to_city_tile_dict(game_state: Game) -> dict[tuple, Optional[Ci
     return pos_to_city_tile_dict
 
 
+# noinspection PyProtectedMember
 class LuxEnv(gym.Env):
     metadata = {"render.modes": []}
 
@@ -68,7 +68,7 @@ class LuxEnv(gym.Env):
             self,
             act_space: BaseActSpace,
             obs_space: BaseObsSpace,
-            configuration: Optional[dict[str, any]] = None,
+            configuration: Optional[Dict[str, Any]] = None,
             seed: Optional[int] = None,
             run_game_automatically: bool = True,
             restart_subproc_after_n_resets: int = 100
@@ -121,7 +121,7 @@ class LuxEnv(gym.Env):
             self._t.start()
             # atexit.register(_cleanup_dimensions_factory(self._dimension_process))
 
-    def reset(self, observation_updates: Optional[list[str]] = None) -> tuple[Game, tuple[float, float], bool, dict]:
+    def reset(self, observation_updates: Optional[List[str]] = None) -> Tuple[Game, Tuple[float, float], bool, Dict]:
         self.game_state = Game()
         self.reset_count = (self.reset_count + 1) % self.restart_subproc_after_n_resets
         if self.reset_count == 0:
@@ -165,7 +165,7 @@ class LuxEnv(gym.Env):
 
         return self.get_obs_reward_done_info()
 
-    def step(self, action: dict[str, np.ndarray]) -> tuple[Game, tuple[float, float], bool, dict]:
+    def step(self, action: Dict[str, np.ndarray]) -> Tuple[Game, Tuple[float, float], bool, Dict]:
         if self.run_game_automatically:
             actions_processed, actions_taken = self.process_actions(action)
             self._step(actions_processed)
@@ -174,15 +174,15 @@ class LuxEnv(gym.Env):
 
         return self.get_obs_reward_done_info()
 
-    def manual_step(self, observation_updates: list[str]) -> NoReturn:
+    def manual_step(self, observation_updates: List[str]) -> NoReturn:
         assert not self.run_game_automatically
         self.game_state._update(observation_updates)
 
-    def get_obs_reward_done_info(self) -> tuple[Game, tuple[float, float], bool, dict]:
+    def get_obs_reward_done_info(self) -> Tuple[Game, Tuple[float, float], bool, Dict]:
         rewards = self.default_reward_space.compute_rewards(game_state=self.game_state, done=self.done)
         return self.game_state, rewards, self.done, copy.copy(self.info)
 
-    def process_actions(self, action: dict[str, np.ndarray]) -> tuple[list[list[str]], dict[str, np.ndarray]]:
+    def process_actions(self, action: Dict[str, np.ndarray]) -> Tuple[List[List[str]], Dict[str, np.ndarray]]:
         return self.action_space.process_actions(
             action,
             self.game_state,
@@ -190,7 +190,7 @@ class LuxEnv(gym.Env):
             self.pos_to_unit_dict
         )
 
-    def _step(self, action: list[list[str]]) -> NoReturn:
+    def _step(self, action: List[List[str]]) -> NoReturn:
         # 2.: Pass in actions (json representation along with id of who made that action),
         #       and agent information (id, status) to dimensions via stdin
         assert len(action) == 2

@@ -22,7 +22,7 @@ import time
 import timeit
 import traceback
 from types import SimpleNamespace
-from typing import *
+from typing import Dict, Union
 import wandb
 import warnings
 
@@ -239,7 +239,7 @@ def learn(
     flags: SimpleNamespace,
     actor_model: nn.Module,
     learner_model: nn.Module,
-    batch: dict[str, torch.Tensor],
+    batch: Dict[str, torch.Tensor],
     optimizer: torch.optim.Optimizer,
     grad_scaler: amp.grad_scaler,
     lr_scheduler: torch.optim.lr_scheduler,
@@ -557,7 +557,7 @@ def train(flags):
                 last_checkpoint_time = timer()
 
             sps = (step - start_step) / (timer() - start_time)
-            bps = (step - start_step) / flags.batch_size / (timer() - start_time)
+            bps = (step - start_step) / (flags.batch_size * flags.unroll_length) / (timer() - start_time)
             logging.info(f"Steps {step:d} @ {sps:.1f} SPS / {bps:.1f} BPS. Stats:\n{pprint.pformat(stats)}")
     except KeyboardInterrupt:
         # Try checkpointing and joining actors then quit.

@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 import gym
 import itertools
 import numpy as np
-from typing import Optional
+from typing import Dict, List, Optional, Tuple
 
 from . import reward_spaces
 from ..lux.constants import Constants
@@ -45,7 +45,7 @@ class BaseObsSpace(ABC):
     @abstractmethod
     def get_obs_spec(
             self,
-            board_dims: tuple[int, int] = MAX_BOARD_SIZE
+            board_dims: Tuple[int, int] = MAX_BOARD_SIZE
     ) -> gym.spaces.Dict:
         if self.include_subtask_encoding:
             return self.get_subtask_encoding(board_dims)
@@ -53,7 +53,7 @@ class BaseObsSpace(ABC):
             return gym.spaces.Dict({})
 
     @abstractmethod
-    def get_subtask_encoding(self, board_dims: tuple[int, int] = MAX_BOARD_SIZE) -> gym.spaces.Dict:
+    def get_subtask_encoding(self, board_dims: Tuple[int, int] = MAX_BOARD_SIZE) -> gym.spaces.Dict:
         pass
 
     @abstractmethod
@@ -62,7 +62,7 @@ class BaseObsSpace(ABC):
 
 
 class FixedShapeObs(BaseObsSpace, ABC):
-    def get_subtask_encoding(self, board_dims: tuple[int, int] = MAX_BOARD_SIZE) -> gym.spaces.Dict:
+    def get_subtask_encoding(self, board_dims: Tuple[int, int] = MAX_BOARD_SIZE) -> gym.spaces.Dict:
         x = board_dims[0]
         y = board_dims[1]
         return gym.spaces.Dict({
@@ -73,7 +73,7 @@ class FixedShapeObs(BaseObsSpace, ABC):
 class FixedShapeContinuousObs(FixedShapeObs):
     def get_obs_spec(
             self,
-            board_dims: tuple[int, int] = MAX_BOARD_SIZE
+            board_dims: Tuple[int, int] = MAX_BOARD_SIZE
     ) -> gym.spaces.Dict:
         subtask_encoding = super(FixedShapeContinuousObs, self).get_obs_spec(board_dims)
         x = board_dims[0]
@@ -175,7 +175,7 @@ class _FixedShapeContinuousObsWrapper(gym.Wrapper):
         observation, reward, done, info = self.env.step(action)
         return self.observation(observation), reward, done, info
 
-    def observation(self, observation: Game) -> dict[str, np.ndarray]:
+    def observation(self, observation: Game) -> Dict[str, np.ndarray]:
         w_capacity = GAME_CONSTANTS["PARAMETERS"]["RESOURCE_CAPACITY"]["WORKER"]
         ca_capacity = GAME_CONSTANTS["PARAMETERS"]["RESOURCE_CAPACITY"]["CART"]
         w_cooldown = GAME_CONSTANTS["PARAMETERS"]["UNIT_ACTION_COOLDOWN"]["WORKER"] * 2. - 1.
@@ -254,7 +254,7 @@ class FixedShapeEmbeddingObs(FixedShapeObs):
     """
     def get_obs_spec(
             self,
-            board_dims: tuple[int, int] = MAX_BOARD_SIZE
+            board_dims: Tuple[int, int] = MAX_BOARD_SIZE
     ) -> gym.spaces.Dict:
         subtask_encoding = super(FixedShapeEmbeddingObs, self).get_obs_spec(board_dims)
         x = board_dims[0]
@@ -368,7 +368,7 @@ class _FixedShapeEmbeddingObsWrapper(gym.Wrapper):
         observation, reward, done, info = self.env.step(action)
         return self.observation(observation), reward, done, info
 
-    def observation(self, observation: Game) -> dict[str, np.ndarray]:
+    def observation(self, observation: Game) -> Dict[str, np.ndarray]:
         max_research = max(GAME_CONSTANTS["PARAMETERS"]["RESEARCH_REQUIREMENTS"].values())
 
         obs = {
@@ -499,3 +499,113 @@ class _FixedShapeEmbeddingObsWrapper(gym.Wrapper):
             obs["subtask"][:] = self.subtask_reward_space.get_subtask_encoding(SUBTASK_ENCODING)
 
         return obs
+
+
+class SequenceObs(BaseObsSpace, ABC):
+    def get_subtask_encoding(self, board_dims: Tuple[int, int] = MAX_BOARD_SIZE) -> gym.spaces.Dict:
+        seq_len = np.prod(board_dims)
+        return gym.spaces.Dict({
+            "subtask": gym.spaces.MultiDiscrete(np.zeros((1, 1, seq_len), dtype=int) + self.n_subtasks)
+        })
+
+    @abstractmethod
+    def entity_encodings(self) -> List[str]:
+        # TODO
+        """
+        return [
+            "city_tile",
+            "worker",
+
+        ]
+        """
+        pass
+
+    @property
+
+
+
+class SequenceEmbeddingObs(SequenceObs):
+    """
+    """
+    def get_obs_spec(
+            self,
+            board_dims: Tuple[int, int] = MAX_BOARD_SIZE
+    ) -> gym.spaces.Dict:
+        subtask_encoding = super(SequenceEmbeddingObs, self).get_obs_spec(board_dims)
+        seq_len = np.prod(board_dims)
+        # Player count
+        p = 2
+        return gym.spaces.Dict({
+            # Player specific observations
+            # none, 1 worker, 2 workers, 3 workers, 4+ workers
+            "worker": gym.spaces.MultiDiscrete(np.zeros((1, p, x, y)) + 5),
+            # none, 1 cart, 2 carts, 3 carts, 4+ carts
+            "cart": gym.spaces.MultiDiscrete(np.zeros((1, p, x, y)) + 5),
+            # NB: cooldowns and cargo are always zero when on city tiles, so one layer will do for
+            # the entire map
+            # All possible values from 1-3 in 0.5 second increments, + a value for <1
+            "worker_cooldown": gym.spaces.MultiDiscrete(np.zeros((1, p, x, y)) + 6),
+            # All possible values from 1-5 in 0.5 second increments, + a value for <1
+            "cart_cooldown": gym.spaces.MultiDiscrete(np.zeros((1, p, x, y)) + 10),
+            # 1 channel for each resource for cart and worker cargos
+            # 5 buckets: [0, 100], increments of 20, 0-19, 20-39, ..., 80-100
+            f"worker_cargo_{WOOD}": gym.spaces.MultiDiscrete(np.zeros((1, p, x, y)) + 5),
+            # 20 buckets: [0, 100], increments of 5, 0-4, 5-9, ..., 95-100
+            f"worker_cargo_{COAL}": gym.spaces.MultiDiscrete(np.zeros((1, p, x, y)) + 20),
+            # 50 buckets: [0, 100], increments of 2, 0-1, 2-3, ..., 98-100
+            f"worker_cargo_{URANIUM}": gym.spaces.MultiDiscrete(np.zeros((1, p, x, y)) + 50),
+            # 20 buckets for all resources: 0-99, 100-199, ..., 1800-1899, 1900-2000
+            f"cart_cargo_{WOOD}": gym.spaces.MultiDiscrete(np.zeros((1, p, x, y)) + 20),
+            f"cart_cargo_{COAL}": gym.spaces.MultiDiscrete(np.zeros((1, p, x, y)) + 20),
+            f"cart_cargo_{URANIUM}": gym.spaces.MultiDiscrete(np.zeros((1, p, x, y)) + 20),
+            # Whether the worker/cart is full
+            "worker_cargo_full": gym.spaces.MultiBinary((1, p, x, y)),
+            "cart_cargo_full": gym.spaces.MultiBinary((1, p, x, y)),
+            # none, city_tile
+            "city_tile": gym.spaces.MultiBinary((1, p, x, y)),
+            # How many nights this city tile would survive without more fuel [0-20+], increments of 1
+            "city_tile_nights_of_fuel": gym.spaces.MultiDiscrete(np.zeros((1, p, x, y)) + 21),
+
+            # 0-30, 31-
+            # "city_tile_fuel": gym.spaces.Box(0., 1., shape=(1, p, x, y)),
+            # 10, 15, 20, 25, 30
+            # "city_tile_cost": gym.spaces.MultiDiscrete(np.zeros((1, p, x, y)) + 5),
+
+            # [0, 9], increments of 1
+            "city_tile_cooldown": gym.spaces.MultiDiscrete(np.zeros((1, p, x, y)) + 10),
+
+            # Player-agnostic observations
+            # [0, 6], increments of 0.5
+            "road_level": gym.spaces.MultiDiscrete(np.zeros((1, 1, x, y)) + 13),
+            # Resources normalized to [0-1]
+            f"{WOOD}": gym.spaces.Box(0., 1., shape=(1, 1, x, y)),
+            f"{COAL}": gym.spaces.Box(0., 1., shape=(1, 1, x, y)),
+            f"{URANIUM}": gym.spaces.Box(0., 1., shape=(1, 1, x, y)),
+
+            # Non-spatial observations
+            # [0, 200], increments of 1
+            # "research_points": gym.spaces.MultiDiscrete(
+            #     np.zeros((1, p)) + GAME_CONSTANTS["PARAMETERS"]["RESEARCH_REQUIREMENTS"]["URANIUM"] + 1
+            # ),
+            "research_points": gym.spaces.Box(0., 1., shape=(1, p)),
+            # coal is researched
+            "researched_coal": gym.spaces.MultiBinary((1, p)),
+            # uranium is researched
+            "researched_uranium": gym.spaces.MultiBinary((1, p)),
+            # True when it is night
+            "night": gym.spaces.MultiBinary((1, 1)),
+            # The turn number % 40
+            "day_night_cycle": gym.spaces.MultiDiscrete(
+                np.zeros((1, 1)) +
+                GAME_CONSTANTS["PARAMETERS"]["DAY_LENGTH"] +
+                GAME_CONSTANTS["PARAMETERS"]["NIGHT_LENGTH"]
+            ),
+            # The number of turns
+            # "turn": gym.spaces.MultiDiscrete(np.zeros((1, 1)) + GAME_CONSTANTS["PARAMETERS"]["MAX_DAYS"]),
+            "turn": gym.spaces.Box(0., 1., shape=(1, 1)),
+            **subtask_encoding.spaces
+        })
+
+    def wrap_env(self, env, subtask_reward_space: Optional[reward_spaces.Subtask] = None) -> gym.Wrapper:
+        return _SequenceEmbeddingObsWrapper(env, self.include_subtask_encoding, subtask_reward_space)
+

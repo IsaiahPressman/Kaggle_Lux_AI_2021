@@ -1,4 +1,4 @@
-from typing import *
+from typing import Callable, Tuple
 import torch
 from torch import nn
 
@@ -78,7 +78,7 @@ class FullConvResidualBlock(nn.Module):
         else:
             self.squeeze_excitation = nn.Identity()
 
-    def forward(self, x: tuple[torch.Tensor, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, x: Tuple[torch.Tensor, torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor]:
         x, input_mask = x
         identity = x
         x = self.conv1(x) * input_mask
