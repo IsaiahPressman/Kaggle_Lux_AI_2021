@@ -1,10 +1,11 @@
 import torch
 from types import SimpleNamespace
+from typing import Dict
 
 from .lux_gym import ACT_SPACES_DICT, OBS_SPACES_DICT, REWARD_SPACES_DICT
 
 
-def flags_to_namespace(flags: dict) -> SimpleNamespace:
+def flags_to_namespace(flags: Dict) -> SimpleNamespace:
     flags = SimpleNamespace(**flags)
 
     # Env params

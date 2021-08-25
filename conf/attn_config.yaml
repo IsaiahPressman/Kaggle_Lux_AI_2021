@@ -20,9 +20,10 @@ obs_space_kwargs:
 reward_space: StatefulMultiReward
 reward_space_kwargs:
   #early_stop: True
-  #negative_weight: 1.1
+  #negative_weight: 1.01
   #research: 0.01
   #fuel: 0.
+  #game_result: 50.
   step: 0.005
 
 ## TRAINING params
@@ -30,12 +31,12 @@ total_steps: 1e8
 num_actors: 2
 n_actor_envs: 16
 unroll_length: 16
-batch_size: 4
+batch_size: 2
 discounting: 0.999
 
 ## MODEL params
 model_arch: attention_model
-n_blocks: 4
+n_blocks: 6
 hidden_dim: 128
 normalize: True
 use_index_select: True

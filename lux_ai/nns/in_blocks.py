@@ -2,7 +2,7 @@ import gym.spaces
 import numpy as np
 import torch
 from torch import nn
-from typing import *
+from typing import Callable, Dict, Optional, Tuple, Union
 
 
 def _index_select(embedding_layer: nn.Embedding, x: torch.Tensor) -> torch.Tensor:
@@ -25,8 +25,8 @@ def _get_select_func(use_index_select: bool) -> Callable:
 class DictInputLayer(nn.Module):
     @staticmethod
     def forward(
-            x: dict[str, Union[dict, torch.Tensor]]
-    ) -> tuple[dict[str, torch.Tensor], torch.Tensor, dict[str, torch.Tensor], Optional[torch.Tensor]]:
+            x: Dict[str, Union[Dict, torch.Tensor]]
+    ) -> Tuple[Dict[str, torch.Tensor], torch.Tensor, Dict[str, torch.Tensor], Optional[torch.Tensor]]:
         return (x["obs"],
                 x["info"]["input_mask"],
                 x["info"]["available_actions_mask"],
@@ -72,7 +72,7 @@ class ConvEmbeddingInputLayer(nn.Module):
         self.continuous_space_embedding = nn.Conv2d(n_continuous_channels, embedding_dim, (1, 1))
         self.select = _get_select_func(use_index_select)
 
-    def forward(self, x: tuple[dict[str, torch.Tensor], torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, x: Tuple[Dict[str, torch.Tensor], torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Expects x to be a dictionary of tensors of shape (b, n, p|1, x, y) or (b, n, p|1)
         Returns an output of shape (b * 2, embedding_dim, x, y) where the observation has been duplicated and the

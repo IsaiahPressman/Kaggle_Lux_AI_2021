@@ -1,5 +1,5 @@
 import torch
-from typing import *
+from typing import Optional
 
 from . import act_spaces, obs_spaces, reward_spaces, multi_subtask
 from .lux_env import LuxEnv

@@ -2,7 +2,7 @@ import copy
 import gym
 import numpy as np
 import torch
-from typing import *
+from typing import Dict, List, NoReturn, Optional, Tuple, Union
 
 from .lux_env import LuxEnv
 from .obs_spaces import MAX_BOARD_SIZE, SUBTASK_ENCODING
@@ -10,7 +10,7 @@ from .reward_spaces import BaseRewardSpace, Subtask
 
 
 class PadFixedShapeEnv(gym.Wrapper):
-    def __init__(self, env: gym.Env, max_board_size: tuple[int, int] = MAX_BOARD_SIZE):
+    def __init__(self, env: gym.Env, max_board_size: Tuple[int, int] = MAX_BOARD_SIZE):
         super(PadFixedShapeEnv, self).__init__(env)
         self.max_board_size = max_board_size
         self.observation_space = self.unwrapped.obs_space.get_obs_spec(max_board_size)
@@ -27,12 +27,12 @@ class PadFixedShapeEnv(gym.Wrapper):
         else:
             return x
 
-    def observation(self, observation: dict[str, Union[dict, np.ndarray]]) -> dict[str, np.ndarray]:
+    def observation(self, observation: Dict[str, Union[Dict, np.ndarray]]) -> Dict[str, np.ndarray]:
         return {
             key: self._pad(val) for key, val in observation.items()
         }
 
-    def info(self, info: dict[str, Union[dict, np.ndarray]]) -> dict[str, np.ndarray]:
+    def info(self, info: Dict[str, Union[Dict, np.ndarray]]) -> Dict[str, np.ndarray]:
         info = {
             key: self._pad(val) for key, val in info.items()
         }
@@ -46,7 +46,7 @@ class PadFixedShapeEnv(gym.Wrapper):
         self.input_mask[:, :self.orig_board_dims[0], :self.orig_board_dims[1]] = 1
         return self.observation(obs), reward, done, self.info(info)
 
-    def step(self, action: dict[str, np.ndarray]):
+    def step(self, action: Dict[str, np.ndarray]):
         action = {
             key: val[..., :self.orig_board_dims[0], :self.orig_board_dims[1]] for key, val in action.items()
         }
@@ -54,7 +54,7 @@ class PadFixedShapeEnv(gym.Wrapper):
         return self.observation(obs), reward, done, self.info(info)
 
     @property
-    def orig_board_dims(self) -> tuple[int, int]:
+    def orig_board_dims(self) -> Tuple[int, int]:
         return self.unwrapped.board_dims
 
     @property
@@ -72,14 +72,14 @@ class RewardSpaceWrapper(gym.Wrapper):
         super(RewardSpaceWrapper, self).__init__(env)
         self.reward_space = reward_space
 
-    def _get_rewards_and_done(self) -> tuple[tuple[float, float], bool]:
+    def _get_rewards_and_done(self) -> Tuple[Tuple[float, float], bool]:
         rewards, done = self.reward_space.compute_rewards_and_done(self.unwrapped.game_state, self.done)
         if self.unwrapped.done and not done:
             raise RuntimeError("Reward space did not return done, but the lux engine is done.")
         self.unwrapped.done = done
         return rewards, done
 
-    def non_logging_info(self) -> dict[str, np.ndarray]:
+    def non_logging_info(self) -> Dict[str, np.ndarray]:
         if isinstance(self.reward_space, Subtask):
             return {"subtask_embeddings": np.array([self.reward_space.get_subtask_encoding(SUBTASK_ENCODING)])}
         else:
@@ -87,11 +87,11 @@ class RewardSpaceWrapper(gym.Wrapper):
 
     def reset(self, **kwargs):
         obs, _, _, info = super(RewardSpaceWrapper, self).reset(**kwargs)
-        return obs, *self._get_rewards_and_done(), dict(**info, **self.non_logging_info())
+        return (obs, *self._get_rewards_and_done(), dict(**info, **self.non_logging_info()))
 
     def step(self, action):
         obs, _, _, info = super(RewardSpaceWrapper, self).step(action)
-        return obs, *self._get_rewards_and_done(), dict(**info, **self.non_logging_info())
+        return (obs, *self._get_rewards_and_done(), dict(**info, **self.non_logging_info()))
 
 
 class LoggingEnv(gym.Wrapper):
@@ -104,7 +104,7 @@ class LoggingEnv(gym.Wrapper):
         # self.resource_count = {"wood", etc...}
         # TODO: Fuel metric?
 
-    def info(self, info: dict[str, np.ndarray], rewards: list[int]) -> dict[str, np.ndarray]:
+    def info(self, info: Dict[str, np.ndarray], rewards: List[int]) -> Dict[str, np.ndarray]:
         info = copy.copy(info)
         game_state = self.env.unwrapped.game_state
         logs = {
@@ -135,7 +135,7 @@ class LoggingEnv(gym.Wrapper):
         self.reward_sums = [0., 0.]
         return obs, reward, done, self.info(info, reward)
 
-    def step(self, action: dict[str, np.ndarray]):
+    def step(self, action: Dict[str, np.ndarray]):
         obs, reward, done, info = super(LoggingEnv, self).step(action)
         return obs, reward, done, self.info(info, reward)
 
@@ -152,19 +152,19 @@ class LoggingEnv(gym.Wrapper):
 
 
 class VecEnv(gym.Env):
-    def __init__(self, envs: list[gym.Env]):
+    def __init__(self, envs: List[gym.Env]):
         self.envs = envs
         self.last_outs = [() for _ in range(len(self.envs))]
 
     @staticmethod
-    def _stack_dict(x: list[Union[dict, np.ndarray]]) -> Union[dict, np.ndarray]:
+    def _stack_dict(x: List[Union[Dict, np.ndarray]]) -> Union[Dict, np.ndarray]:
         if isinstance(x[0], dict):
             return {key: VecEnv._stack_dict([i[key] for i in x]) for key in x[0].keys()}
         else:
             return np.stack([arr for arr in x], axis=0)
 
     @staticmethod
-    def _vectorize_env_outs(env_outs: list[tuple]) -> tuple:
+    def _vectorize_env_outs(env_outs: List[Tuple]) -> Tuple:
         obs_list, reward_list, done_list, info_list = zip(*env_outs)
         obs_stacked = VecEnv._stack_dict(obs_list)
         reward_stacked = np.array(reward_list)
@@ -185,7 +185,7 @@ class VecEnv(gym.Env):
                 self.last_outs[i] = env.reset(**kwargs)
         return VecEnv._vectorize_env_outs(self.last_outs)
 
-    def step(self, action: dict[str, np.ndarray]):
+    def step(self, action: Dict[str, np.ndarray]):
         actions = [
             {key: val[i] for key, val in action.items()} for i in range(len(self.envs))
         ]
@@ -206,19 +206,19 @@ class VecEnv(gym.Env):
             return [env.seed(seed) for i, env in enumerate(self.envs)]
 
     @property
-    def unwrapped(self) -> list[gym.Env]:
+    def unwrapped(self) -> List[gym.Env]:
         return [env.unwrapped for env in self.envs]
 
     @property
-    def action_space(self) -> list[gym.spaces.Dict]:
+    def action_space(self) -> List[gym.spaces.Dict]:
         return [env.action_space for env in self.envs]
 
     @property
-    def observation_space(self) -> list[gym.spaces.Dict]:
+    def observation_space(self) -> List[gym.spaces.Dict]:
         return [env.observation_space for env in self.envs]
 
     @property
-    def metadata(self) -> list[dict]:
+    def metadata(self) -> List[Dict]:
         return [env.metadata for env in self.envs]
 
 
@@ -230,13 +230,13 @@ class PytorchEnv(gym.Wrapper):
     def reset(self, **kwargs):
         return tuple([self._to_tensor(out) for out in super(PytorchEnv, self).reset(**kwargs)])
         
-    def step(self, action: dict[str, torch.Tensor]):
+    def step(self, action: Dict[str, torch.Tensor]):
         action = {
             key: val.cpu().numpy() for key, val in action.items()
         }
         return tuple([self._to_tensor(out) for out in super(PytorchEnv, self).step(action)])
 
-    def _to_tensor(self, x: Union[dict, np.ndarray]) -> dict[str, Union[dict, torch.Tensor]]:
+    def _to_tensor(self, x: Union[Dict, np.ndarray]) -> Dict[str, Union[Dict, torch.Tensor]]:
         if isinstance(x, dict):
             return {key: self._to_tensor(val) for key, val in x.items()}
         else:

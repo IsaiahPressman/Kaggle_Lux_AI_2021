@@ -2,12 +2,12 @@ from copy import copy
 import gym
 import numpy as np
 import torch
-from typing import *
+from typing import Any, Callable, Dict, List, Tuple, Union
 
-Buffers = list[dict[str, Union[dict, torch.Tensor]]]
+Buffers = List[Dict[str, Union[Dict, torch.Tensor]]]
 
 
-def fill_buffers_inplace(buffers: Union[dict, torch.Tensor], fill_vals: Union[dict, torch.Tensor], step: int):
+def fill_buffers_inplace(buffers: Union[Dict, torch.Tensor], fill_vals: Union[Dict, torch.Tensor], step: int):
     if isinstance(fill_vals, dict):
         for key, val in copy(fill_vals).items():
             fill_buffers_inplace(buffers[key], val, step)
@@ -15,7 +15,7 @@ def fill_buffers_inplace(buffers: Union[dict, torch.Tensor], fill_vals: Union[di
         buffers[step, ...] = fill_vals[:]
 
 
-def stack_buffers(buffers: Buffers, dim: int) -> dict[str, Union[dict, torch.Tensor]]:
+def stack_buffers(buffers: Buffers, dim: int) -> Dict[str, Union[Dict, torch.Tensor]]:
     stacked_buffers = {}
     for key, val in copy(buffers[0]).items():
         if isinstance(val, dict):
@@ -26,11 +26,11 @@ def stack_buffers(buffers: Buffers, dim: int) -> dict[str, Union[dict, torch.Ten
 
 
 def split_buffers(
-        buffers: dict[str, Union[dict, torch.Tensor]],
-        split_size_or_sections: Union[int, list[int]],
+        buffers: Dict[str, Union[Dict, torch.Tensor]],
+        split_size_or_sections: Union[int, List[int]],
         dim: int,
         contiguous: bool,
-) -> list[Union[dict, torch.Tensor]]:
+) -> List[Union[Dict, torch.Tensor]]:
     buffers_split = None
     for key, val in copy(buffers).items():
         if isinstance(val, dict):
@@ -47,7 +47,7 @@ def split_buffers(
     return buffers_split
 
 
-def buffers_apply(buffers: Union[dict, torch.Tensor], func: Callable[[torch.Tensor], Any]) -> Union[dict, torch.Tensor]:
+def buffers_apply(buffers: Union[Dict, torch.Tensor], func: Callable[[torch.Tensor], Any]) -> Union[Dict, torch.Tensor]:
     if isinstance(buffers, dict):
         return {
             key: buffers_apply(val, func) for key, val in copy(buffers).items()
@@ -56,7 +56,7 @@ def buffers_apply(buffers: Union[dict, torch.Tensor], func: Callable[[torch.Tens
         return func(buffers)
 
 
-def _create_buffers_from_specs(specs: dict[str, Union[dict, tuple, torch.dtype]]) -> Union[dict, torch.Tensor]:
+def _create_buffers_from_specs(specs: Dict[str, Union[Dict, Tuple, torch.dtype]]) -> Union[Dict, torch.Tensor]:
     if isinstance(specs, dict) and "dtype" not in specs.keys():
         new_buffers = {}
         for key, val in specs.items():
@@ -66,7 +66,7 @@ def _create_buffers_from_specs(specs: dict[str, Union[dict, tuple, torch.dtype]]
         return torch.empty(**specs).share_memory_()
 
 
-def _create_buffers_like(buffers: Union[dict, torch.Tensor], t_dim: int) -> Union[dict, torch.Tensor]:
+def _create_buffers_like(buffers: Union[Dict, torch.Tensor], t_dim: int) -> Union[Dict, torch.Tensor]:
     if isinstance(buffers, dict):
         torch_buffers = {}
         for key, val in buffers.items():
@@ -77,7 +77,7 @@ def _create_buffers_like(buffers: Union[dict, torch.Tensor], t_dim: int) -> Unio
         return torch.empty_like(buffers).share_memory_()
 
 
-def create_buffers(flags, example_info: dict[str, Union[dict, np.ndarray, torch.Tensor]]) -> Buffers:
+def create_buffers(flags, example_info: Dict[str, Union[Dict, np.ndarray, torch.Tensor]]) -> Buffers:
     t = flags.unroll_length
     n = flags.n_actor_envs
     p = 2

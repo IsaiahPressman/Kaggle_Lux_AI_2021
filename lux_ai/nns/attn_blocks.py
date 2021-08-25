@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
-from typing import *
+from typing import Callable, Tuple
 
 
 class RelPosSelfAttention(nn.Module):
@@ -178,7 +178,7 @@ class ViTBlock(nn.Module):
             )
         )
 
-    def forward(self, x: tuple[torch.Tensor, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, x: Tuple[torch.Tensor, torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor]:
         x, input_mask = x
         identity = x
         x = self.mhsa(self.norm1(x), input_mask)

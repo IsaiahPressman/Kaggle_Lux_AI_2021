@@ -4,7 +4,7 @@ import math
 import torch
 from torch import nn
 import torch.nn.functional as F
-from typing import *
+from typing import Any, Callable, Dict, NoReturn, Optional, Tuple, Union
 
 from .in_blocks import DictInputLayer
 from ..lux.game_constants import GAME_CONSTANTS
@@ -48,9 +48,9 @@ class DictActor(nn.Module):
     def forward(
             self,
             x: torch.Tensor,
-            available_actions_mask: dict[str, torch.Tensor],
+            available_actions_mask: Dict[str, torch.Tensor],
             sample: bool
-    ) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
+    ) -> Tuple[Dict[str, torch.Tensor], Dict[str, torch.Tensor]]:
         """
         Expects an input of shape batch_size * 2, n_channels, h, w
         This input will be projected by the actors, and then converted to shape batch_size, n_channels, 2, h, w
@@ -191,9 +191,9 @@ class BasicActorCriticNetwork(nn.Module):
 
     def forward(
             self,
-            x: dict[str, Union[dict, torch.Tensor]],
+            x: Dict[str, Union[dict, torch.Tensor]],
             sample: bool = True
-    ) -> dict[str, Any]:
+    ) -> Dict[str, Any]:
         x, input_mask, available_actions_mask, subtask_embeddings = self.dict_input_layer(x)
         base_out, _ = self.base_model((x, input_mask))
         if subtask_embeddings is not None:

@@ -3,7 +3,7 @@ from functools import cache, cached_property
 import gym
 import numpy as np
 import torch
-from typing import *
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
 
 from .obs_spaces import MAX_BOARD_SIZE
@@ -96,7 +96,7 @@ def _transfer_factory(action_meaning: str) -> Callable[..., str]:
     if direction not in DIRECTIONS:
         raise ValueError(f"Unrecognized direction '{direction}' in action_meaning '{action_meaning}'")
 
-    def _transfer_func(unit: Unit, pos_to_unit_dict: dict[tuple, Optional[Unit]]) -> str:
+    def _transfer_func(unit: Unit, pos_to_unit_dict: Dict[Tuple, Optional[Unit]]) -> str:
         dest_pos = unit.pos.translate(direction, 1)
         dest_unit = pos_to_unit_dict.get((dest_pos.x, dest_pos.y), None)
         # If the square is not on the map or there is not an allied unit in that square
@@ -140,36 +140,36 @@ for u in ["worker", "cart"]:
 
 class BaseActSpace(ABC):
     @abstractmethod
-    def get_action_space(self, board_dims: tuple[int, int] = MAX_BOARD_SIZE) -> gym.spaces.Dict:
+    def get_action_space(self, board_dims: Tuple[int, int] = MAX_BOARD_SIZE) -> gym.spaces.Dict:
         pass
 
     @abstractmethod
     def process_actions(
             self,
-            action_tensors_dict: dict[str, np.ndarray],
+            action_tensors_dict: Dict[str, np.ndarray],
             game_state: Game,
-            board_dims: tuple[int, int],
-            pos_to_unit_dict: dict[tuple, Optional[Unit]]
-    ) -> tuple[list[list[str]], dict[str, np.ndarray]]:
+            board_dims: Tuple[int, int],
+            pos_to_unit_dict: Dict[Tuple, Optional[Unit]]
+    ) -> Tuple[List[List[str]], Dict[str, np.ndarray]]:
         pass
 
     @abstractmethod
     def get_available_actions_mask(
             self,
             game_state: Game,
-            board_dims: tuple[int, int],
-            pos_to_unit_dict: dict[tuple, Optional[Unit]],
-            pos_to_city_tile_dict: dict[tuple, Optional[CityTile]]
-    ) -> dict[str, np.ndarray]:
+            board_dims: Tuple[int, int],
+            pos_to_unit_dict: Dict[Tuple, Optional[Unit]],
+            pos_to_city_tile_dict: Dict[Tuple, Optional[CityTile]]
+    ) -> Dict[str, np.ndarray]:
         pass
 
     @cached_property
-    def keys(self) -> tuple[str, ...]:
+    def keys(self) -> Tuple[str, ...]:
         return tuple(self.get_action_space().spaces.keys())
 
     def from_dict(
             self,
-            actions_like: dict[str, Union[torch.Tensor, np.ndarray]],
+            actions_like: Dict[str, Union[torch.Tensor, np.ndarray]],
             expanded: bool = False,
             concatenation_func: Callable = torch.cat
     ) -> Union[torch.Tensor, np.ndarray]:
@@ -181,11 +181,11 @@ class BaseActSpace(ABC):
 
 
 class BasicActionSpace(BaseActSpace):
-    def __init__(self, default_board_dims: Optional[tuple[int, int]] = None):
+    def __init__(self, default_board_dims: Optional[Tuple[int, int]] = None):
         self.default_board_dims = MAX_BOARD_SIZE if default_board_dims is None else default_board_dims
 
     @cache
-    def get_action_space(self, board_dims: Optional[tuple[int, int]] = None) -> gym.spaces.Dict:
+    def get_action_space(self, board_dims: Optional[Tuple[int, int]] = None) -> gym.spaces.Dict:
         if board_dims is None:
             board_dims = self.default_board_dims
         x = board_dims[0]
@@ -203,7 +203,7 @@ class BasicActionSpace(BaseActSpace):
         })
 
     @cache
-    def get_action_space_expanded_shape(self, *args, **kwargs) -> dict[str, tuple[int, ...]]:
+    def get_action_space_expanded_shape(self, *args, **kwargs) -> Dict[str, Tuple[int, ...]]:
         action_space = self.get_action_space(*args, **kwargs)
         action_space_expanded = {}
         for key, val in action_space.spaces.items():
@@ -212,11 +212,11 @@ class BasicActionSpace(BaseActSpace):
 
     def process_actions(
             self,
-            action_tensors_dict: dict[str, np.ndarray],
+            action_tensors_dict: Dict[str, np.ndarray],
             game_state: Game,
-            board_dims: tuple[int, int],
-            pos_to_unit_dict: dict[tuple, Optional[Unit]]
-    ) -> tuple[list[list[str]], dict[str, np.ndarray]]:
+            board_dims: Tuple[int, int],
+            pos_to_unit_dict: Dict[Tuple, Optional[Unit]]
+    ) -> Tuple[List[List[str]], Dict[str, np.ndarray]]:
         action_strs = [[], []]
         actions_taken = {
             key: np.zeros(space.shape, dtype=bool) for key, space in self.get_action_space(board_dims).spaces.items()
@@ -266,10 +266,10 @@ class BasicActionSpace(BaseActSpace):
     def get_available_actions_mask(
             self,
             game_state: Game,
-            board_dims: tuple[int, int],
-            pos_to_unit_dict: dict[tuple, Optional[Unit]],
-            pos_to_city_tile_dict: dict[tuple, Optional[CityTile]]
-    ) -> dict[str, np.ndarray]:
+            board_dims: Tuple[int, int],
+            pos_to_unit_dict: Dict[Tuple, Optional[Unit]],
+            pos_to_city_tile_dict: Dict[Tuple, Optional[CityTile]]
+    ) -> Dict[str, np.ndarray]:
         available_actions_mask = {
             key: np.ones(space.shape + (len(ACTION_MEANINGS[key]),), dtype=bool)
             for key, space in self.get_action_space(board_dims).spaces.items()
@@ -398,7 +398,7 @@ class BasicActionSpace(BaseActSpace):
         return available_actions_mask
 
 
-def get_unit_action(unit: Unit, action_idx: int, pos_to_unit_dict: dict[tuple, Optional[Unit]]) -> Optional[str]:
+def get_unit_action(unit: Unit, action_idx: int, pos_to_unit_dict: Dict[Tuple, Optional[Unit]]) -> Optional[str]:
     if unit.is_worker():
         unit_type = "worker"
     elif unit.is_cart():

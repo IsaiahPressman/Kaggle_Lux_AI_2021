@@ -87,7 +87,7 @@ class RLAgent:
         # Do not edit
         self.unwrapped_env.manual_step(obs["updates"])
 
-    def get_env_output(self) -> dict:
+    def get_env_output(self) -> Dict:
         return self.env.step(self.action_placeholder)
 
     @property
