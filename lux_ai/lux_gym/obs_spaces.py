@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from functools import lru_cache
 import gym
 import itertools
 import numpy as np
@@ -508,104 +509,167 @@ class SequenceObs(BaseObsSpace, ABC):
             "subtask": gym.spaces.MultiDiscrete(np.zeros((1, 1, seq_len), dtype=int) + self.n_subtasks)
         })
 
-    @abstractmethod
-    def entity_encodings(self) -> List[str]:
-        # TODO
-        """
-        return [
-            "city_tile",
-            "worker",
 
-        ]
-        """
-        pass
-
-    @property
-
-
-
-class SequenceEmbeddingObs(SequenceObs):
+class SequenceContinuousObs(SequenceObs):
     """
     """
     def get_obs_spec(
             self,
             board_dims: Tuple[int, int] = MAX_BOARD_SIZE
     ) -> gym.spaces.Dict:
-        subtask_encoding = super(SequenceEmbeddingObs, self).get_obs_spec(board_dims)
+        subtask_encoding = super(SequenceContinuousObs, self).get_obs_spec(board_dims)
         seq_len = np.prod(board_dims)
         # Player count
         p = 2
         return gym.spaces.Dict({
             # Player specific observations
-            # none, 1 worker, 2 workers, 3 workers, 4+ workers
-            "worker": gym.spaces.MultiDiscrete(np.zeros((1, p, x, y)) + 5),
-            # none, 1 cart, 2 carts, 3 carts, 4+ carts
-            "cart": gym.spaces.MultiDiscrete(np.zeros((1, p, x, y)) + 5),
-            # NB: cooldowns and cargo are always zero when on city tiles, so one layer will do for
-            # the entire map
-            # All possible values from 1-3 in 0.5 second increments, + a value for <1
-            "worker_cooldown": gym.spaces.MultiDiscrete(np.zeros((1, p, x, y)) + 6),
-            # All possible values from 1-5 in 0.5 second increments, + a value for <1
-            "cart_cooldown": gym.spaces.MultiDiscrete(np.zeros((1, p, x, y)) + 10),
-            # 1 channel for each resource for cart and worker cargos
-            # 5 buckets: [0, 100], increments of 20, 0-19, 20-39, ..., 80-100
-            f"worker_cargo_{WOOD}": gym.spaces.MultiDiscrete(np.zeros((1, p, x, y)) + 5),
-            # 20 buckets: [0, 100], increments of 5, 0-4, 5-9, ..., 95-100
-            f"worker_cargo_{COAL}": gym.spaces.MultiDiscrete(np.zeros((1, p, x, y)) + 20),
-            # 50 buckets: [0, 100], increments of 2, 0-1, 2-3, ..., 98-100
-            f"worker_cargo_{URANIUM}": gym.spaces.MultiDiscrete(np.zeros((1, p, x, y)) + 50),
-            # 20 buckets for all resources: 0-99, 100-199, ..., 1800-1899, 1900-2000
-            f"cart_cargo_{WOOD}": gym.spaces.MultiDiscrete(np.zeros((1, p, x, y)) + 20),
-            f"cart_cargo_{COAL}": gym.spaces.MultiDiscrete(np.zeros((1, p, x, y)) + 20),
-            f"cart_cargo_{URANIUM}": gym.spaces.MultiDiscrete(np.zeros((1, p, x, y)) + 20),
-            # Whether the worker/cart is full
-            "worker_cargo_full": gym.spaces.MultiBinary((1, p, x, y)),
-            "cart_cargo_full": gym.spaces.MultiBinary((1, p, x, y)),
-            # none, city_tile
-            "city_tile": gym.spaces.MultiBinary((1, p, x, y)),
-            # How many nights this city tile would survive without more fuel [0-20+], increments of 1
-            "city_tile_nights_of_fuel": gym.spaces.MultiDiscrete(np.zeros((1, p, x, y)) + 21),
+            # One of: None, city_tile (me and opp), cart (me and opp), worker (me and opp), road, coal, wood, uranium
+            "entity": gym.spaces.MultiDiscrete(np.zeros((p, seq_len))),
 
-            # 0-30, 31-
-            # "city_tile_fuel": gym.spaces.Box(0., 1., shape=(1, p, x, y)),
-            # 10, 15, 20, 25, 30
-            # "city_tile_cost": gym.spaces.MultiDiscrete(np.zeros((1, p, x, y)) + 5),
+            # City tile and unit observations
+            # Cooldown normalized from 0-1 (when relevant)
+            "normalized_cooldown": gym.spaces.Box(0., 1., shape=(p, 1, seq_len)),
+            # Cargo normalized from 0-1
+            f"cargo_{WOOD}": gym.spaces.Box(0., 1., shape=(p, 1, seq_len)),
+            f"cargo_{COAL}": gym.spaces.Box(0., 1., shape=(p, 1, seq_len)),
+            f"cargo_{URANIUM}": gym.spaces.Box(0., 1., shape=(p, 1, seq_len)),
+            # Whether the unit is full
+            "cargo_full": gym.spaces.MultiBinary((p, 1, seq_len)),
+            # How much fuel this unit/city_tile has
+            "fuel": gym.spaces.Box(0., 1., shape=(p, 1, seq_len)),
+            # How much fuel this unit costs per turn at night
+            "cost": gym.spaces.Box(0., 1., shape=(p, 1, seq_len)),
 
-            # [0, 9], increments of 1
-            "city_tile_cooldown": gym.spaces.MultiDiscrete(np.zeros((1, p, x, y)) + 10),
+            # Road observations
+            "road_level": gym.spaces.Box(0., 1., shape=(p, 1, seq_len)),
 
-            # Player-agnostic observations
-            # [0, 6], increments of 0.5
-            "road_level": gym.spaces.MultiDiscrete(np.zeros((1, 1, x, y)) + 13),
-            # Resources normalized to [0-1]
-            f"{WOOD}": gym.spaces.Box(0., 1., shape=(1, 1, x, y)),
-            f"{COAL}": gym.spaces.Box(0., 1., shape=(1, 1, x, y)),
-            f"{URANIUM}": gym.spaces.Box(0., 1., shape=(1, 1, x, y)),
+            # Resource observations
+            f"entity_COUNT": gym.spaces.Box(0., 1., shape=(p, 1, seq_len)),
 
             # Non-spatial observations
-            # [0, 200], increments of 1
-            # "research_points": gym.spaces.MultiDiscrete(
-            #     np.zeros((1, p)) + GAME_CONSTANTS["PARAMETERS"]["RESEARCH_REQUIREMENTS"]["URANIUM"] + 1
-            # ),
-            "research_points": gym.spaces.Box(0., 1., shape=(1, p)),
+            "research_points": gym.spaces.Box(0., 1., shape=(p, p)),
             # coal is researched
-            "researched_coal": gym.spaces.MultiBinary((1, p)),
+            "researched_coal": gym.spaces.MultiBinary((p, p)),
             # uranium is researched
-            "researched_uranium": gym.spaces.MultiBinary((1, p)),
+            "researched_uranium": gym.spaces.MultiBinary((p, p)),
             # True when it is night
-            "night": gym.spaces.MultiBinary((1, 1)),
+            "night": gym.spaces.MultiBinary((p, p)),
             # The turn number % 40
             "day_night_cycle": gym.spaces.MultiDiscrete(
-                np.zeros((1, 1)) +
+                np.zeros((p, 1)) +
                 GAME_CONSTANTS["PARAMETERS"]["DAY_LENGTH"] +
                 GAME_CONSTANTS["PARAMETERS"]["NIGHT_LENGTH"]
             ),
             # The number of turns
-            # "turn": gym.spaces.MultiDiscrete(np.zeros((1, 1)) + GAME_CONSTANTS["PARAMETERS"]["MAX_DAYS"]),
-            "turn": gym.spaces.Box(0., 1., shape=(1, 1)),
+            "turn": gym.spaces.Box(0., 1., shape=(p, 1)),
             **subtask_encoding.spaces
         })
 
     def wrap_env(self, env, subtask_reward_space: Optional[reward_spaces.Subtask] = None) -> gym.Wrapper:
         return _SequenceEmbeddingObsWrapper(env, self.include_subtask_encoding, subtask_reward_space)
 
+
+class _SequenceEmbeddingObsWrapper(gym.Wrapper):
+    def __init__(
+            self,
+            env: gym.Env,
+            include_subtask_encoding: bool,
+            subtask_reward_space: Optional[reward_spaces.Subtask]
+    ):
+        super(_SequenceEmbeddingObsWrapper, self).__init__(env)
+        if include_subtask_encoding:
+            if subtask_reward_space is None:
+                raise ValueError("Cannot use subtask_encoding without providing subtask_reward_space.")
+            elif not isinstance(subtask_reward_space, reward_spaces.Subtask):
+                raise ValueError("Reward_space must be an instance of Subtask")
+        self.include_subtask_encoding = include_subtask_encoding
+        self.subtask_reward_space = subtask_reward_space
+        self._empty_obs = {}
+        for key, spec in self.observation_space.spaces.items():
+            if isinstance(spec, gym.spaces.MultiBinary) or isinstance(spec, gym.spaces.MultiDiscrete):
+                self._empty_obs[key] = np.zeros(spec.shape, dtype=np.int64)
+            elif isinstance(spec, gym.spaces.Box):
+                self._empty_obs[key] = np.zeros(spec.shape, dtype=np.float32)
+            else:
+                raise NotImplementedError(f"{type(spec)} is not an accepted observation space.")
+
+    def reset(self, **kwargs):
+        observation, reward, done, info = self.env.reset(**kwargs)
+        return self.observation(observation), reward, done, info
+
+    def step(self, action):
+        observation, reward, done, info = self.env.step(action)
+        return self.observation(observation), reward, done, info
+
+    def observation(self, observation: Game) -> Dict[str, np.ndarray]:
+        # TODO
+        raise NotImplementedError
+        w_capacity = GAME_CONSTANTS["PARAMETERS"]["RESOURCE_CAPACITY"]["WORKER"]
+        ca_capacity = GAME_CONSTANTS["PARAMETERS"]["RESOURCE_CAPACITY"]["CART"]
+        w_cooldown = GAME_CONSTANTS["PARAMETERS"]["UNIT_ACTION_COOLDOWN"]["WORKER"] * 2. - 1.
+        ca_cooldown = GAME_CONSTANTS["PARAMETERS"]["UNIT_ACTION_COOLDOWN"]["CART"] * 2. - 1.
+        ci_light = GAME_CONSTANTS["PARAMETERS"]["LIGHT_UPKEEP"]["CITY"]
+        ci_cooldown = GAME_CONSTANTS["PARAMETERS"]["CITY_ACTION_COOLDOWN"]
+        max_road = GAME_CONSTANTS["PARAMETERS"]["MAX_ROAD"]
+        max_research = max(GAME_CONSTANTS["PARAMETERS"]["RESEARCH_REQUIREMENTS"].values())
+
+        obs = {
+            key: val.copy() for key, val in self._empty_obs.items()
+        }
+
+        for player in observation.players:
+            p_id = player.team
+            for unit in player.units:
+                x, y = unit.pos.x, unit.pos.y
+                if unit.is_worker():
+                    obs["worker"][0, p_id, x, y] = 1
+                    obs["worker_COUNT"][0, p_id, x, y] += 1
+                    obs["worker_cooldown"][0, p_id, x, y] = unit.cooldown / w_cooldown
+                    obs["worker_cargo_full"][0, p_id, x, y] = unit.get_cargo_space_left() == 0
+
+                    obs[f"worker_cargo_{WOOD}"][0, p_id, x, y] = unit.cargo.wood / w_capacity
+                    obs[f"worker_cargo_{COAL}"][0, p_id, x, y] = unit.cargo.coal / w_capacity
+                    obs[f"worker_cargo_{URANIUM}"][0, p_id, x, y] = unit.cargo.uranium / w_capacity
+
+                elif unit.is_cart():
+                    obs["cart"][0, p_id, x, y] = 1
+                    obs["cart_COUNT"][0, p_id, x, y] += 1
+                    obs["cart_cooldown"][0, p_id, x, y] = unit.cooldown / ca_cooldown
+                    obs["cart_cargo_full"][0, p_id, x, y] = unit.get_cargo_space_left() == 0
+
+                    obs[f"cart_cargo_{WOOD}"][0, p_id, x, y] = unit.cargo.wood / ca_capacity
+                    obs[f"cart_cargo_{COAL}"][0, p_id, x, y] = unit.cargo.coal / ca_capacity
+                    obs[f"cart_cargo_{URANIUM}"][0, p_id, x, y] = unit.cargo.uranium / ca_capacity
+                else:
+                    raise NotImplementedError(f'New unit type: {unit}')
+
+            for city in player.cities.values():
+                city_fuel_normalized = city.fuel / MAX_FUEL / len(city.citytiles)
+                city_light_normalized = city.light_upkeep / ci_light / len(city.citytiles)
+                for city_tile in city.citytiles:
+                    x, y = city_tile.pos.x, city_tile.pos.y
+                    obs["city_tile"][0, p_id, x, y] = 1
+                    obs["city_tile_fuel"][0, p_id, x, y] = city_fuel_normalized
+                    # NB: This doesn't technically register the light upkeep of a given city tile, but instead
+                    # the average light cost of every tile in the given city
+                    obs["city_tile_cost"][0, p_id, x, y] = city_light_normalized
+                    obs["city_tile_cooldown"][0, p_id, x, y] = city_tile.cooldown / ci_cooldown
+
+            for cell in itertools.chain(*observation.map.map):
+                x, y = cell.pos.x, cell.pos.y
+                obs["road_level"][0, 0, x, y] = cell.road / max_road
+                if cell.has_resource():
+                    obs[f"{cell.resource.type}"][0, 0, x, y] = cell.resource.amount / MAX_RESOURCE[cell.resource.type]
+
+            obs["research_points"][0, p_id] = player.research_points / max_research
+            obs["researched_coal"][0, p_id] = player.researched_coal()
+            obs["researched_uranium"][0, p_id] = player.researched_uranium()
+        dn_cycle_len = GAME_CONSTANTS["PARAMETERS"]["DAY_LENGTH"] + GAME_CONSTANTS["PARAMETERS"]["NIGHT_LENGTH"]
+        obs["night"][0, 0] = observation.turn % dn_cycle_len >= GAME_CONSTANTS["PARAMETERS"]["DAY_LENGTH"]
+        obs["day_night_cycle"][0, 0] = (observation.turn % dn_cycle_len) / dn_cycle_len
+        obs["turn"][0, 0] = observation.turn / GAME_CONSTANTS["PARAMETERS"]["MAX_DAYS"]
+
+        if self.include_subtask_encoding:
+            obs["subtask"][:] = self.subtask_reward_space.get_subtask_encoding(SUBTASK_ENCODING)
+
+        return obs
