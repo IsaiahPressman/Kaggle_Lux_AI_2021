@@ -34,7 +34,13 @@ class DictInputLayer(nn.Module):
 
 
 class ConvEmbeddingInputLayer(nn.Module):
-    def __init__(self, obs_space: gym.spaces.Dict, embedding_dim: int, use_index_select: bool = True):
+    def __init__(
+            self,
+            obs_space: gym.spaces.Dict,
+            embedding_dim: int,
+            n_merge_layers: int = 1,
+            use_index_select: bool = True
+    ):
         super(ConvEmbeddingInputLayer, self).__init__()
 
         embeddings = {}
@@ -71,9 +77,34 @@ class ConvEmbeddingInputLayer(nn.Module):
                 raise NotImplementedError(f"{type(val)} is not an accepted observation space.")
 
         self.embeddings = nn.ModuleDict(embeddings)
-        self.continuous_space_embedding = nn.Conv2d(n_continuous_channels, embedding_dim, (1, 1))
-        self.embedding_merger = nn.Conv2d(n_embedding_channels, embedding_dim, (1, 1))
-        self.merger = nn.Conv2d(embedding_dim * 2, embedding_dim, (1, 1))
+        continuous_space_embedding_layers = []
+        embedding_merger_layers = []
+        merger_layers = []
+        for i in range(n_merge_layers - 1):
+            continuous_space_embedding_layers.extend([
+                nn.Conv2d(n_continuous_channels, n_continuous_channels, (1, 1)),
+                nn.ReLU()
+            ])
+            embedding_merger_layers.extend([
+                nn.Conv2d(n_embedding_channels, n_embedding_channels, (1, 1)),
+                nn.ReLU()
+            ])
+            merger_layers.extend([
+                nn.Conv2d(embedding_dim * 2, embedding_dim * 2, (1, 1)),
+                nn.ReLU()
+            ])
+        continuous_space_embedding_layers.extend([
+            nn.Conv2d(n_continuous_channels, embedding_dim, (1, 1)),
+            nn.ReLU()
+        ])
+        embedding_merger_layers.extend([
+            nn.Conv2d(n_embedding_channels, embedding_dim, (1, 1)),
+            nn.ReLU()
+        ])
+        merger_layers.append(nn.Conv2d(embedding_dim * 2, embedding_dim, (1, 1)))
+        self.continuous_space_embedding = nn.Sequential(*continuous_space_embedding_layers)
+        self.embedding_merger = nn.Sequential(*embedding_merger_layers)
+        self.merger = nn.Sequential(*merger_layers)
         self.select = _get_select_func(use_index_select)
 
     def forward(self, x: Tuple[Dict[str, torch.Tensor], torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor]:

@@ -17,6 +17,7 @@ def create_model(flags, device: torch.device) -> nn.Module:
             ConvEmbeddingInputLayer(
                 obs_space=obs_space.get_obs_spec(),
                 embedding_dim=flags.hidden_dim,
+                n_merge_layers=flags.n_merge_layers,
                 use_index_select=flags.use_index_select
             ),
             *[FullConvResidualBlock(
@@ -33,6 +34,7 @@ def create_model(flags, device: torch.device) -> nn.Module:
             ConvEmbeddingInputLayer(
                 obs_space=obs_space.get_obs_spec(),
                 embedding_dim=flags.hidden_dim,
+                n_merge_layers=flags.n_merge_layers,
                 use_index_select=flags.use_index_select
             ),
             *[ViTBlock(
