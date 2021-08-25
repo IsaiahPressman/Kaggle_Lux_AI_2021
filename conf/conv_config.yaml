@@ -37,7 +37,8 @@ discounting: 0.999
 ## MODEL params
 model_arch: conv_model
 n_blocks: 4
-hidden_dim: 128
+hidden_dim: 64
+n_merge_layers: 2
 normalize: False
 use_index_select: True
 # Conv-specific params

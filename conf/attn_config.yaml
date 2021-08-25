@@ -38,6 +38,7 @@ discounting: 0.999
 model_arch: attention_model
 n_blocks: 6
 hidden_dim: 128
+n_merge_layers: 2
 normalize: True
 use_index_select: True
 # Attention-specific params
