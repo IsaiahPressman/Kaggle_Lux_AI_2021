@@ -39,6 +39,7 @@ class ConvEmbeddingInputLayer(nn.Module):
 
         embeddings = {}
         n_continuous_channels = 0
+        n_embedding_channels = 0
         self.keys_to_op = {}
         for key, val in obs_space.spaces.items():
             assert val.shape[0] == 1
@@ -61,6 +62,7 @@ class ConvEmbeddingInputLayer(nn.Module):
                 n_players = val.shape[1]
                 n_embeddings = n_players * (n_embeddings - 1) + 1
                 embeddings[key] = nn.Embedding(n_embeddings, embedding_dim, padding_idx=0)
+                n_embedding_channels += embedding_dim
                 self.keys_to_op[key] = "embedding"
             elif isinstance(val, gym.spaces.Box):
                 n_continuous_channels += np.prod(val.shape[:2])
@@ -70,6 +72,8 @@ class ConvEmbeddingInputLayer(nn.Module):
 
         self.embeddings = nn.ModuleDict(embeddings)
         self.continuous_space_embedding = nn.Conv2d(n_continuous_channels, embedding_dim, (1, 1))
+        self.embedding_merger = nn.Conv2d(n_embedding_channels, embedding_dim, (1, 1))
+        self.merger = nn.Conv2d(embedding_dim * 2, embedding_dim, (1, 1))
         self.select = _get_select_func(use_index_select)
 
     def forward(self, x: Tuple[Dict[str, torch.Tensor], torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -136,5 +140,6 @@ class ConvEmbeddingInputLayer(nn.Module):
             else:
                 raise RuntimeError(f"Unknown operation: {op}")
         continuous_out_combined = self.continuous_space_embedding(torch.cat(continuous_outs, dim=1))
-        embedding_outs_combined = torch.stack([v for v in embedding_outs.values()], dim=-1).sum(dim=-1)
-        return continuous_out_combined + embedding_outs_combined, input_mask
+        embedding_outs_combined = self.embedding_merger(torch.cat([v for v in embedding_outs.values()], dim=1))
+        merged_outs = self.merger(torch.cat([continuous_out_combined, embedding_outs_combined], dim=1))
+        return merged_outs, input_mask

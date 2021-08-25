@@ -1,8 +1,7 @@
 from abc import ABC, abstractmethod
-from functools import cache, cached_property
+from functools import lru_cache
 import gym
 import numpy as np
-import torch
 from typing import Callable, Dict, List, Optional, Tuple, Union
 
 
@@ -163,28 +162,12 @@ class BaseActSpace(ABC):
     ) -> Dict[str, np.ndarray]:
         pass
 
-    @cached_property
-    def keys(self) -> Tuple[str, ...]:
-        return tuple(self.get_action_space().spaces.keys())
-
-    def from_dict(
-            self,
-            actions_like: Dict[str, Union[torch.Tensor, np.ndarray]],
-            expanded: bool = False,
-            concatenation_func: Callable = torch.cat
-    ) -> Union[torch.Tensor, np.ndarray]:
-        if expanded:
-            # In the case that the actions dimension has been expanded at the end
-            return concatenation_func([actions_like[key] for key in self.keys], -5)
-        else:
-            return concatenation_func([actions_like[key] for key in self.keys], -4)
-
 
 class BasicActionSpace(BaseActSpace):
     def __init__(self, default_board_dims: Optional[Tuple[int, int]] = None):
         self.default_board_dims = MAX_BOARD_SIZE if default_board_dims is None else default_board_dims
 
-    @cache
+    @lru_cache(maxsize=None)
     def get_action_space(self, board_dims: Optional[Tuple[int, int]] = None) -> gym.spaces.Dict:
         if board_dims is None:
             board_dims = self.default_board_dims
@@ -202,7 +185,7 @@ class BasicActionSpace(BaseActSpace):
             ),
         })
 
-    @cache
+    @lru_cache(maxsize=None)
     def get_action_space_expanded_shape(self, *args, **kwargs) -> Dict[str, Tuple[int, ...]]:
         action_space = self.get_action_space(*args, **kwargs)
         action_space_expanded = {}
