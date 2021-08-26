@@ -37,8 +37,8 @@ discounting: 0.999
 ## MODEL params
 model_arch: conv_model
 n_blocks: 4
-hidden_dim: 64
-n_merge_layers: 2
+hidden_dim: 128
+n_merge_layers: 1
 normalize: False
 use_index_select: True
 # Conv-specific params
@@ -48,7 +48,7 @@ kernel_size: 5
 ## OPTIMIZER params
 optimizer_class: Adam
 optimizer_kwargs:
-  lr: 2e-4
+  lr: 1e-4
   # See https://arxiv.org/pdf/2105.05246.pdf
   eps: 0.0003
   #alpha: 0.9

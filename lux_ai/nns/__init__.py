@@ -5,7 +5,7 @@ from ..lux_gym.obs_spaces import MAX_BOARD_SIZE, SUBTASK_ENCODING
 from ..lux_gym.multi_subtask import MultiSubtask
 from .models import BasicActorCriticNetwork
 from .in_blocks import ConvEmbeddingInputLayer
-from .attn_blocks import ViTBlock
+from .attn_blocks import ViTBlock, RPSA, GPSA
 from .conv_blocks import FullConvResidualBlock
 
 
@@ -27,9 +27,10 @@ def create_model(flags, device: torch.device) -> nn.Module:
                 width=MAX_BOARD_SIZE[1],
                 kernel_size=flags.kernel_size,
                 normalize=flags.normalize,
+                activation=nn.LeakyReLU
             ) for _ in range(flags.n_blocks)]
         )
-    elif flags.model_arch == "attention_model":
+    elif flags.model_arch == "RPSA_model":
         base_model = nn.Sequential(
             ConvEmbeddingInputLayer(
                 obs_space=obs_space.get_obs_spec(),
@@ -40,9 +41,38 @@ def create_model(flags, device: torch.device) -> nn.Module:
             *[ViTBlock(
                 in_channels=flags.hidden_dim,
                 out_channels=flags.hidden_dim,
-                mhsa_heads=flags.mhsa_heads,
+                n_heads=flags.n_heads,
                 height=MAX_BOARD_SIZE[0],
                 width=MAX_BOARD_SIZE[1],
+                mhsa_layer=RPSA(
+                    in_channels=flags.hidden_dim,
+                    heads=flags.n_heads,
+                    height=MAX_BOARD_SIZE[0],
+                    width=MAX_BOARD_SIZE[1]
+                ),
+                normalize=flags.normalize,
+            ) for _ in range(flags.n_blocks)]
+        )
+    elif flags.model_arch == "GPSA_model":
+        base_model = nn.Sequential(
+            ConvEmbeddingInputLayer(
+                obs_space=obs_space.get_obs_spec(),
+                embedding_dim=flags.hidden_dim,
+                n_merge_layers=flags.n_merge_layers,
+                use_index_select=flags.use_index_select
+            ),
+            *[ViTBlock(
+                in_channels=flags.hidden_dim,
+                out_channels=flags.hidden_dim,
+                n_heads=flags.n_heads,
+                height=MAX_BOARD_SIZE[0],
+                width=MAX_BOARD_SIZE[1],
+                mhsa_layer=GPSA(
+                    dim=flags.hidden_dim,
+                    n_heads=flags.n_heads,
+                    height=MAX_BOARD_SIZE[0],
+                    width=MAX_BOARD_SIZE[1]
+                ),
                 normalize=flags.normalize,
             ) for _ in range(flags.n_blocks)]
         )

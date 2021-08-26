@@ -35,7 +35,7 @@ batch_size: 2
 discounting: 0.999
 
 ## MODEL params
-model_arch: RPSA_model
+model_arch: GPSA_model
 n_blocks: 4
 hidden_dim: 128
 n_merge_layers: 2
