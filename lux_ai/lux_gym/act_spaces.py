@@ -245,8 +245,10 @@ class BasicActionSpace(BaseActSpace):
                     if city_tile.can_act():
                         x, y = city_tile.pos.x, city_tile.pos.y
                         action_idx = action_tensors_dict["city_tile"][0, p_id, x, y, 0]
+                        action_meaning = ACTION_MEANINGS["city_tile"][action_idx]
                         action = get_city_tile_action(city_tile, action_idx)
-                        actions_taken["city_tile"][0, p_id, x, y, action_idx] = action is not None and action != ""
+                        action_was_taken = action_meaning == "NO-OP" or (action is not None and action != "")
+                        actions_taken["city_tile"][0, p_id, x, y, action_idx] = action_was_taken
                         # None means no-op
                         if action is not None:
                             # noinspection PyTypeChecker
