@@ -1,5 +1,5 @@
 import sys
-from typing import List, NoReturn, Tuple
+from typing import Any, List, NoReturn, Tuple
 
 from .utility_constants import LOCAL_EVAL
 from ..lux.game import Player
@@ -15,11 +15,11 @@ def in_bounds(pos: Position, board_dims: Tuple[int, int]) -> bool:
     return 0 <= pos.x < board_dims[0] and 0 <= pos.y < board_dims[1]
 
 
-def DEBUG_MESSAGE(msg: str) -> NoReturn:
+def DEBUG_MESSAGE(msg: Any) -> NoReturn:
     print(msg, file=sys.stderr)
 
 
-def RUNTIME_ASSERT(statement: bool, msg: str = "") -> NoReturn:
+def RUNTIME_ASSERT(statement: bool, msg: Any = "") -> NoReturn:
     """
     Asserts a statement, but only raises an error during local evaluation.
     During competition evaluation, instead prints the error to the agent debug logs
