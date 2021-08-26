@@ -226,8 +226,14 @@ class BasicActionSpace(BaseActSpace):
                         action = None
                     else:
                         action_idx = action_tensors_dict[unit_type][0, p_id, x, y, actor_count]
+                        action_meaning = ACTION_MEANINGS[unit_type][action_idx]
                         action = get_unit_action(unit, action_idx, pos_to_unit_dict)
-                        actions_taken[unit_type][0, p_id, x, y, action_idx] = action is not None and action != ""
+                        # If action is NO-OP, skip remaining actions
+                        if action_meaning == "NO-OP":
+                            actions_taken[unit_type][0, p_id, x, y, action_idx] = True
+                            actions_taken_count[x, y] += MAX_OVERLAPPING_ACTIONS
+                        else:
+                            actions_taken[unit_type][0, p_id, x, y, action_idx] = action is not None and action != ""
                     # None means no-op
                     # "" means invalid transfer action - fed to game as no-op
                     if action is not None and action != "":
