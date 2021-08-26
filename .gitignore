@@ -10,5 +10,6 @@ __pycache__/
 # Hydra experiment outputs
 outputs/
 
-# Rl agent .pt file
+# Rl agent config and .pt files
+lux_ai/rl_agent/config.yaml
 lux_ai/rl_agent/*.pt
