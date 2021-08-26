@@ -16,3 +16,7 @@ outputs/
 # Rl agent config and .pt files
 lux_ai/rl_agent/config.yaml
 lux_ai/rl_agent/*.pt
+
+# RL agent copy for comparing different model weights
+main_2.py
+lux_ai/rl_agent_2/
