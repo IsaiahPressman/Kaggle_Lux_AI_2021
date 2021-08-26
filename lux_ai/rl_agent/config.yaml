@@ -16,14 +16,15 @@ unroll_length: 16
 batch_size: 4
 discounting: 0.999
 model_arch: conv_model
-n_blocks: 4
+n_blocks: 8
 hidden_dim: 128
+n_merge_layers: 1
 normalize: false
 use_index_select: true
 kernel_size: 5
 optimizer_class: Adam
 optimizer_kwargs:
-  lr: 0.0002
+  lr: 0.0001
   eps: 0.0003
 min_lr_mod: 0.01
 entropy_cost: 0.001

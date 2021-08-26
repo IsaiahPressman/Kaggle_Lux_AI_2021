@@ -3,11 +3,13 @@ from torch import nn
 import torch.nn.functional as F
 from typing import Callable, Tuple
 
+from .weight_init import trunc_normal_
+
 
 class RelPosSelfAttention(nn.Module):
     """
     Relative Position Self Attention
-    Forked from: https://gist.github.com/ShoufaChen/ec7b70038a6fdb488da4b34355380569
+    From: https://gist.github.com/ShoufaChen/ec7b70038a6fdb488da4b34355380569
     """
 
     def __init__(self, h: int, w: int, dim: int, relative=True, fold_heads=False):
@@ -118,18 +120,18 @@ class GroupPointWise(nn.Module):
         return out
 
 
-class MHSA(nn.Module):
+class RPSA(nn.Module):
     """
     """
-    def __init__(self, in_channels, heads, curr_h, curr_w, pos_enc_type='relative'):
-        super(MHSA, self).__init__()
+    def __init__(self, in_channels, heads, height, width, pos_enc_type='relative'):
+        super(RPSA, self).__init__()
         self.q_proj = GroupPointWise(in_channels, heads, proj_factor=1)
         self.k_proj = GroupPointWise(in_channels, heads, proj_factor=1)
         self.v_proj = GroupPointWise(in_channels, heads, proj_factor=1)
 
         assert pos_enc_type in ['relative', 'absolute']
         if pos_enc_type == 'relative':
-            self.self_attention = RelPosSelfAttention(curr_h, curr_w, in_channels // heads, fold_heads=True)
+            self.self_attention = RelPosSelfAttention(height, width, in_channels // heads, fold_heads=True)
         else:
             raise NotImplementedError
 
@@ -142,26 +144,133 @@ class MHSA(nn.Module):
         return o
 
 
+class GPSA(nn.Module):
+    """
+    Gated positional self-attention
+    From: https://github.com/facebookresearch/convit/blob/main/convit.py
+    """
+    def __init__(self, dim, height, width, n_heads=4, qkv_bias=False, qk_scale=None, attn_drop=0., proj_drop=0.,
+                 locality_strength=1., use_local_init=True):
+        super().__init__()
+        self.num_heads = n_heads
+        self.dim = dim
+        self.height = height
+        self.width = width
+        head_dim = dim // n_heads
+        self.scale = qk_scale or head_dim ** -0.5
+
+        self.qk = nn.Linear(dim, dim * 2, bias=qkv_bias)
+        self.v = nn.Linear(dim, dim, bias=qkv_bias)
+
+        self.attn_drop = nn.Dropout(attn_drop)
+        self.proj = nn.Linear(dim, dim)
+        self.pos_proj = nn.Linear(3, n_heads)
+        self.proj_drop = nn.Dropout(proj_drop)
+        self.locality_strength = locality_strength
+        self.gating_param = nn.Parameter(torch.ones(self.num_heads))
+        self.apply(self._init_weights)
+        if use_local_init:
+            self.local_init(locality_strength=locality_strength)
+        self.register_buffer("rel_indices", self.get_rel_indices())
+
+    def _init_weights(self, m):
+        if isinstance(m, nn.Linear):
+            trunc_normal_(m.weight, std=.02)
+            if isinstance(m, nn.Linear) and m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+        elif isinstance(m, nn.LayerNorm):
+            nn.init.constant_(m.bias, 0)
+            nn.init.constant_(m.weight, 1.0)
+
+    def forward(self, x: torch.Tensor, input_mask: torch.Tensor) -> torch.Tensor:
+        x = torch.flatten(x, start_dim=-2, end_dim=-1).permute(0, 2, 1)
+        input_mask = torch.flatten(input_mask, start_dim=-2, end_dim=-1)
+        B, N, C = x.shape
+
+        attn = self.get_attention(x, input_mask)
+        v = self.v(x).reshape(B, N, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
+        x = (attn @ v).transpose(1, 2).reshape(B, N, C)
+        x = self.proj(x)
+        x = self.proj_drop(x)
+
+        x = x.permute(0, 2, 1)
+        x = x.view(B, C, self.height, self.width)
+        return x
+
+    def get_attention(self, x, input_mask):
+        B, N, C = x.shape
+        qk = self.qk(x).reshape(B, N, 2, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
+        q, k = qk[0], qk[1]
+        pos_score = self.rel_indices.expand(B, -1, -1, -1)
+        pos_score = self.pos_proj(pos_score).permute(0, 3, 1, 2)
+        patch_score = (q @ k.transpose(-2, -1)) * self.scale
+        patch_score = patch_score.softmax(dim=-1)
+        pos_score = pos_score.softmax(dim=-1)
+
+        gating = self.gating_param.view(1, -1, 1, 1)
+        attn = (1. - torch.sigmoid(gating)) * patch_score + torch.sigmoid(gating) * pos_score
+        attn /= attn.sum(dim=-1).unsqueeze(-1)
+        attn = self.attn_drop(attn)
+        attn = attn * input_mask.float().unsqueeze(-2)
+        attn = attn / attn.sum(dim=-1, keepdim=True)
+        return attn
+
+    def get_attention_map(self, x, input_mask, return_map=False):
+        attn_map = self.get_attention(x, input_mask).mean(0)  # average over batch
+        distances = self.rel_indices.squeeze()[:, :, -1] ** .5
+        dist = torch.einsum('nm,hnm->h', (distances, attn_map))
+        dist /= distances.size(0)
+        if return_map:
+            return dist, attn_map
+        else:
+            return dist
+
+    def local_init(self, locality_strength=1.):
+        self.v.weight.data.copy_(torch.eye(self.dim))
+        locality_distance = 1  # max(1,1/locality_strength**.5)
+
+        kernel_size = int(self.num_heads ** .5)
+        center = (kernel_size - 1) / 2 if kernel_size % 2 == 0 else kernel_size // 2
+        for h1 in range(kernel_size):
+            for h2 in range(kernel_size):
+                position = h1 + kernel_size * h2
+                self.pos_proj.weight.data[position, 2] = -1
+                self.pos_proj.weight.data[position, 1] = 2 * (h1 - center) * locality_distance
+                self.pos_proj.weight.data[position, 0] = 2 * (h2 - center) * locality_distance
+        self.pos_proj.weight.data *= locality_strength
+
+    def get_rel_indices(self):
+        assert self.height == self.width
+        img_size = self.height
+        num_patches = self.height * self.width
+        rel_indices = torch.zeros(1, num_patches, num_patches, 3)
+        ind = torch.arange(img_size).view(1, -1) - torch.arange(img_size).view(-1, 1)
+        indx = ind.repeat(img_size, img_size)
+        indy = ind.repeat_interleave(img_size, dim=0).repeat_interleave(img_size, dim=1)
+        indd = indx ** 2 + indy ** 2
+        rel_indices[:, :, :, 2] = indd.unsqueeze(0)
+        rel_indices[:, :, :, 1] = indy.unsqueeze(0)
+        rel_indices[:, :, :, 0] = indx.unsqueeze(0)
+        device = self.qk.weight.device
+        return rel_indices.to(device)
+
+
 class ViTBlock(nn.Module):
     def __init__(
-        self,
-        in_channels: int,
-        out_channels: int,
-        mhsa_heads: int,
-        height: int,
-        width: int,
-        normalize: bool = True,
-        activation: Callable = nn.GELU
+            self,
+            in_channels: int,
+            out_channels: int,
+            n_heads: int,
+            height: int,
+            width: int,
+            mhsa_layer: nn.Module,
+            normalize: bool = True,
+            activation: Callable = nn.GELU
     ):
         super(ViTBlock, self).__init__()
 
         self.norm1 = nn.LayerNorm([in_channels, height, width]) if normalize else nn.Identity()
-        self.mhsa = MHSA(
-            in_channels=in_channels,
-            heads=mhsa_heads,
-            curr_h=height,
-            curr_w=width
-        )
+        self.mhsa = mhsa_layer
 
         self.norm2 = nn.LayerNorm([in_channels, height, width]) if normalize else nn.Identity()
         self.mlp = nn.Sequential(
