@@ -60,21 +60,19 @@ def combine_policy_logits_to_log_probs(
     Initial shape: time, batch, action_planes, players, x, y
     Returned shape: time, batch, players
     """
-    # Get the log probs for the selected actions
-    behavior_action_log_probs = -F.nll_loss(
-        F.log_softmax(behavior_policy_logits.view(-1, behavior_policy_logits.shape[-1]), dim=-1),
-        torch.flatten(actions),
-        reduction="none",
-    ).view_as(actions)
+    # Get the log probs
+    log_probs = F.log_softmax(behavior_policy_logits, dim=-1)
     # Ignore log probs for actions that were not used
-    assert actions_taken_mask.shape == behavior_action_log_probs.shape
-    behavior_action_log_probs = torch.where(
-        actions_taken_mask,
-        behavior_action_log_probs,
-        torch.zeros_like(behavior_action_log_probs)
+    log_probs = actions_taken_mask * torch.where(
+        ~torch.isneginf(log_probs),
+        log_probs,
+        torch.zeros_like(log_probs)
     )
-    # Sum over y, x, and action_planes dimensions to combine log_probs from different actions
-    return behavior_action_log_probs.sum(dim=-1).sum(dim=-1).sum(dim=-2)
+    # Select the log probs for the actions that were taken
+    selected_log_probs = torch.gather(log_probs, -1, actions)
+    # Sum over actions, y, and x dimensions to combine log_probs from different actions
+    # Squeeze out action_planes dimension as well
+    return torch.flatten(selected_log_probs, start_dim=-3, end_dim=-1).sum(dim=-1).squeeze(dim=-2)
 
 
 def combine_policy_entropy(
@@ -104,7 +102,7 @@ def combine_policy_entropy(
         torch.zeros_like(entropies)
     )
     # Sum over y, x, and action_planes dimensions to combine entropies from different actions
-    return entropies_masked.sum(dim=-1).sum(dim=-1).sum(dim=-2)
+    return entropies_masked.sum(dim=-1).sum(dim=-1).squeeze(dim=-2)
 
 
 def reduce(losses: torch.Tensor, reduction: str) -> torch.Tensor:
@@ -152,6 +150,10 @@ def act(
     actor_model: torch.nn.Module,
     buffers: Buffers,
 ):
+    if flags.debug:
+        catch_me = AssertionError
+    else:
+        catch_me = Exception
     try:
         logging.info("Actor %i started.", actor_index)
         timings = prof.Timings()
@@ -204,9 +206,7 @@ def act(
 
     except KeyboardInterrupt:
         pass  # Return silently.
-    # For debugging:
-    # except AssertionError as e:
-    except Exception as e:
+    except catch_me as e:
         logging.error("Exception in worker process %i", actor_index)
         traceback.print_exc()
         print()
@@ -287,15 +287,18 @@ def learn(
                     actions_taken_mask
                 )
                 combined_learner_action_log_probs = combined_learner_action_log_probs + learner_action_log_probs
+
+                # Only take entropy for spaces where at least one action was taken
+                any_actions_taken = actions_taken_mask.any(dim=-1)
                 learner_policy_entropy = combine_policy_entropy(
                     learner_policy_logits,
-                    actions_taken_mask
+                    any_actions_taken
                 )
                 combined_learner_entropy = combined_learner_entropy + learner_policy_entropy
                 entropies[act_space] = -(reduce(
                     learner_policy_entropy,
                     reduction="sum"
-                ) / actions_taken_mask.sum()).detach().cpu().item()
+                ) / any_actions_taken.sum()).detach().cpu().item()
 
             discounts = (~batch["done"]).float() * flags.discounting
             discounts = discounts.unsqueeze(-1).expand_as(combined_behavior_action_log_probs)

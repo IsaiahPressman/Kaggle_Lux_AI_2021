@@ -39,7 +39,8 @@ class ConvEmbeddingInputLayer(nn.Module):
             obs_space: gym.spaces.Dict,
             embedding_dim: int,
             n_merge_layers: int = 1,
-            use_index_select: bool = True
+            use_index_select: bool = True,
+            activation: Callable = nn.LeakyReLU
     ):
         super(ConvEmbeddingInputLayer, self).__init__()
 
@@ -83,23 +84,23 @@ class ConvEmbeddingInputLayer(nn.Module):
         for i in range(n_merge_layers - 1):
             continuous_space_embedding_layers.extend([
                 nn.Conv2d(n_continuous_channels, n_continuous_channels, (1, 1)),
-                nn.ReLU()
+                activation()
             ])
             embedding_merger_layers.extend([
                 nn.Conv2d(n_embedding_channels, n_embedding_channels, (1, 1)),
-                nn.ReLU()
+                activation()
             ])
             merger_layers.extend([
                 nn.Conv2d(embedding_dim * 2, embedding_dim * 2, (1, 1)),
-                nn.ReLU()
+                activation()
             ])
         continuous_space_embedding_layers.extend([
             nn.Conv2d(n_continuous_channels, embedding_dim, (1, 1)),
-            nn.ReLU()
+            activation()
         ])
         embedding_merger_layers.extend([
             nn.Conv2d(n_embedding_channels, embedding_dim, (1, 1)),
-            nn.ReLU()
+            activation()
         ])
         merger_layers.append(nn.Conv2d(embedding_dim * 2, embedding_dim, (1, 1)))
         self.continuous_space_embedding = nn.Sequential(*continuous_space_embedding_layers)

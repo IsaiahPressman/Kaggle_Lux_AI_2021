@@ -11,6 +11,9 @@ from ..lux.game import Game
 from ..lux.game_constants import GAME_CONSTANTS
 from ..lux.game_objects import CityTile, Unit
 
+# The maximum number of actions that can be taken by units sharing a square
+# All remaining units take the no-op action
+MAX_OVERLAPPING_ACTIONS = 4
 DIRECTIONS = (
     Constants.DIRECTIONS.NORTH,
     Constants.DIRECTIONS.EAST,
@@ -175,11 +178,9 @@ class BasicActionSpace(BaseActSpace):
         y = board_dims[1]
         # Player count
         p = 2
-        # There are up to 4 action planes for workers/carts when they are stacked on city tiles.
-        # All remaining actions are no-ops
         return gym.spaces.Dict({
-            "worker": gym.spaces.MultiDiscrete(np.zeros((4, p, x, y), dtype=int) + len(ACTION_MEANINGS["worker"])),
-            "cart": gym.spaces.MultiDiscrete(np.zeros((4, p, x, y), dtype=int) + len(ACTION_MEANINGS["cart"])),
+            "worker": gym.spaces.MultiDiscrete(np.zeros((1, p, x, y), dtype=int) + len(ACTION_MEANINGS["worker"])),
+            "cart": gym.spaces.MultiDiscrete(np.zeros((1, p, x, y), dtype=int) + len(ACTION_MEANINGS["cart"])),
             "city_tile": gym.spaces.MultiDiscrete(
                 np.zeros((1, p, x, y), dtype=int) + len(ACTION_MEANINGS["city_tile"])
             ),
@@ -202,7 +203,7 @@ class BasicActionSpace(BaseActSpace):
     ) -> Tuple[List[List[str]], Dict[str, np.ndarray]]:
         action_strs = [[], []]
         actions_taken = {
-            key: np.zeros(space.shape, dtype=bool) for key, space in self.get_action_space(board_dims).spaces.items()
+            key: np.zeros(space, dtype=bool) for key, space in self.get_action_space_expanded_shape(board_dims).items()
         }
         for player in game_state.players:
             p_id = player.team
@@ -220,13 +221,13 @@ class BasicActionSpace(BaseActSpace):
                     else:
                         raise NotImplementedError(f'New unit type: {unit}')
                     # Action plane is selected for stacked units
-                    action_plane = actions_taken_count[x, y]
-                    if action_plane >= action_tensors_dict[unit_type].shape[0]:
+                    actor_count = actions_taken_count[x, y]
+                    if actor_count >= MAX_OVERLAPPING_ACTIONS:
                         action = None
                     else:
-                        action_idx = action_tensors_dict[unit_type][action_plane, p_id, x, y]
+                        action_idx = action_tensors_dict[unit_type][0, p_id, x, y, actor_count]
                         action = get_unit_action(unit, action_idx, pos_to_unit_dict)
-                        actions_taken[unit_type][action_plane, p_id, x, y] = True
+                        actions_taken[unit_type][0, p_id, x, y, action_idx] = action is not None and action != ""
                     # None means no-op
                     # "" means invalid transfer action - fed to game as no-op
                     if action is not None and action != "":
@@ -237,9 +238,9 @@ class BasicActionSpace(BaseActSpace):
                 for city_tile in city.citytiles:
                     if city_tile.can_act():
                         x, y = city_tile.pos.x, city_tile.pos.y
-                        action_idx = action_tensors_dict["city_tile"][0, p_id, x, y]
+                        action_idx = action_tensors_dict["city_tile"][0, p_id, x, y, 0]
                         action = get_city_tile_action(city_tile, action_idx)
-                        actions_taken["city_tile"][0, p_id, x, y] = True
+                        actions_taken["city_tile"][0, p_id, x, y, action_idx] = action is not None and action != ""
                         # None means no-op
                         if action is not None:
                             # noinspection PyTypeChecker

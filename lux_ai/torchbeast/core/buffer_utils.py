@@ -4,6 +4,8 @@ import numpy as np
 import torch
 from typing import Any, Callable, Dict, List, Tuple, Union
 
+from ...lux_gym.act_spaces import MAX_OVERLAPPING_ACTIONS
+
 Buffers = List[Dict[str, Union[Dict, torch.Tensor]]]
 
 
@@ -97,16 +99,15 @@ def create_buffers(flags, example_info: Dict[str, Union[Dict, np.ndarray, torch.
         obs=obs_specs,
         reward=dict(size=(t + 1, n, p), dtype=torch.float32),
         done=dict(size=(t + 1, n), dtype=torch.bool),
-        policy_logits={
-            key: dict(size=(t + 1, n, *val), dtype=torch.float32)
-            for key, val in flags.act_space().get_action_space_expanded_shape().items()
-        },
+        policy_logits={},
         baseline=dict(size=(t + 1, n, p), dtype=torch.float32),
-        actions={
-            key: dict(size=(t + 1, n, *val.shape), dtype=torch.int64)
-            for key, val in flags.act_space().get_action_space().spaces.items()
-        },
+        actions={},
     )
+    act_space = flags.act_space()
+    for key, expanded_shape in act_space.get_action_space_expanded_shape().items():
+        specs["policy_logits"][key] = dict(size=(t + 1, n, *expanded_shape), dtype=torch.float32)
+        final_actions_dim = min(expanded_shape[-1], MAX_OVERLAPPING_ACTIONS)
+        specs["actions"][key] = dict(size=(t + 1, n, *expanded_shape[:-1], final_actions_dim), dtype=torch.int64)
     buffers: Buffers = []
     for _ in range(flags.num_buffers):
         new_buffer = _create_buffers_from_specs(specs)
