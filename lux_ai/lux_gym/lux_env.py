@@ -15,7 +15,7 @@ from typing import Any, Dict, List, NoReturn, Optional, Tuple
 
 from ..lux.game import Game
 from ..lux.game_objects import Unit, CityTile
-from ..lux_gym.act_spaces import BaseActSpace, ACTION_MEANINGS
+from ..lux_gym.act_spaces import BaseActSpace, ACTION_MEANINGS, MAX_OVERLAPPING_ACTIONS
 from ..lux_gym.obs_spaces import BaseObsSpace, MAX_BOARD_SIZE
 from ..lux_gym.reward_spaces import GameResultReward
 
@@ -153,7 +153,7 @@ class LuxEnv(gym.Env):
         self.observation_space = self.obs_space.get_obs_spec(self.board_dims)
         self.info = {
             "actions_taken": {
-                key: np.zeros(space.shape, dtype=bool)
+                key: np.zeros(space.shape + (len(ACTION_MEANINGS[key]),), dtype=bool)
                 for key, space in self.action_space.get_action_space(self.board_dims).spaces.items()
             },
             "available_actions_mask": {

@@ -1,9 +1,8 @@
 from abc import ABC, abstractmethod
-from functools import lru_cache
 import gym
 import itertools
 import numpy as np
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 from . import reward_spaces
 from ..lux.constants import Constants
@@ -164,7 +163,7 @@ class _FixedShapeContinuousObsWrapper(gym.Wrapper):
             if isinstance(spec, gym.spaces.MultiBinary) or isinstance(spec, gym.spaces.MultiDiscrete):
                 self._empty_obs[key] = np.zeros(spec.shape, dtype=np.int64)
             elif isinstance(spec, gym.spaces.Box):
-                self._empty_obs[key] = np.zeros(spec.shape, dtype=np.float32)
+                self._empty_obs[key] = np.zeros(spec.shape, dtype=np.float32) + spec.low
             else:
                 raise NotImplementedError(f"{type(spec)} is not an accepted observation space.")
 
@@ -357,7 +356,7 @@ class _FixedShapeEmbeddingObsWrapper(gym.Wrapper):
             if isinstance(spec, gym.spaces.MultiBinary) or isinstance(spec, gym.spaces.MultiDiscrete):
                 self._empty_obs[key] = np.zeros(spec.shape, dtype=np.int64)
             elif isinstance(spec, gym.spaces.Box):
-                self._empty_obs[key] = np.zeros(spec.shape, dtype=np.float32)
+                self._empty_obs[key] = np.zeros(spec.shape, dtype=np.float32) + spec.low
             else:
                 raise NotImplementedError(f"{type(spec)} is not an accepted observation space.")
 
@@ -544,7 +543,7 @@ class SequenceContinuousObs(SequenceObs):
             "road_level": gym.spaces.Box(0., 1., shape=(p, 1, seq_len)),
 
             # Resource observations
-            f"entity_COUNT": gym.spaces.Box(0., 1., shape=(p, 1, seq_len)),
+            f"entity_COUNT": gym.spaces.Box(1., float("inf"), shape=(p, 1, seq_len)),
 
             # Non-spatial observations
             "research_points": gym.spaces.Box(0., 1., shape=(p, p)),
@@ -589,7 +588,7 @@ class _SequenceEmbeddingObsWrapper(gym.Wrapper):
             if isinstance(spec, gym.spaces.MultiBinary) or isinstance(spec, gym.spaces.MultiDiscrete):
                 self._empty_obs[key] = np.zeros(spec.shape, dtype=np.int64)
             elif isinstance(spec, gym.spaces.Box):
-                self._empty_obs[key] = np.zeros(spec.shape, dtype=np.float32)
+                self._empty_obs[key] = np.zeros(spec.shape, dtype=np.float32) + spec.low
             else:
                 raise NotImplementedError(f"{type(spec)} is not an accepted observation space.")
 

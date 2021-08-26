@@ -8,6 +8,7 @@ from typing import Any, Callable, Dict, NoReturn, Optional, Tuple, Union
 
 from .in_blocks import DictInputLayer
 from ..lux.game_constants import GAME_CONSTANTS
+from ..lux_gym.act_spaces import MAX_OVERLAPPING_ACTIONS
 from ..lux_gym.reward_spaces import RewardSpec
 
 
@@ -78,15 +79,27 @@ class DictActor(nn.Module):
             )
             actions = DictActor.logits_to_actions(logits.view(-1, n_actions), sample)
             policy_logits_out[key] = logits
-            actions_out[key] = actions.view(*logits.shape[:-1])
+            actions_out[key] = actions.view(*logits.shape[:-1], -1)
         return policy_logits_out, actions_out
 
     @staticmethod
+    @torch.no_grad()
     def logits_to_actions(logits: torch.Tensor, sample: bool) -> torch.Tensor:
         if sample:
-            return torch.multinomial(F.softmax(logits, dim=-1), num_samples=1)
+            probs = F.softmax(logits, dim=-1)
+            # In case there are fewer than MAX_OVERLAPPING_ACTIONS available actions, we add a small eps value
+            probs = torch.where(
+                (probs > 0.).sum(dim=-1, keepdim=True) >= MAX_OVERLAPPING_ACTIONS,
+                probs,
+                probs + 1e-10
+            )
+            return torch.multinomial(
+                probs,
+                num_samples=min(MAX_OVERLAPPING_ACTIONS, probs.shape[-1]),
+                replacement=False
+            )
         else:
-            return logits.argmax(dim=-1)
+            return logits.argsort(dim=-1, descending=True)[..., :MAX_OVERLAPPING_ACTIONS]
 
 
 class MultiLinear(nn.Module):

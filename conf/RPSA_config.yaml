@@ -10,7 +10,7 @@ project: Lux_AI_2021
 # The wandb user to log to
 entity: isaiahpressman
 # The wandb group for the run
-group: attention
+group: RPSA
 
 ## ENV params
 act_space: BasicActionSpace
@@ -36,7 +36,7 @@ discounting: 0.999
 
 ## MODEL params
 model_arch: attention_model
-n_blocks: 6
+n_blocks: 4
 hidden_dim: 128
 n_merge_layers: 2
 normalize: True
