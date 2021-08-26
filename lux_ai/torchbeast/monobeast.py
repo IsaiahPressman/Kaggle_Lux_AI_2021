@@ -57,8 +57,10 @@ def combine_policy_logits_to_log_probs(
     """
     Combines all policy_logits at a given step to get a single action_log_probs value for that step
 
-    Initial shape: time, batch, action_planes, players, x, y
+    Initial shape: time, batch, 1, players, x, y
     Returned shape: time, batch, players
+    """
+    # DEPRECATED incorrect (but effective?) way of doing things:
     """
     # Get the log probs
     log_probs = F.log_softmax(behavior_policy_logits, dim=-1)
@@ -72,7 +74,27 @@ def combine_policy_logits_to_log_probs(
     selected_log_probs = torch.gather(log_probs, -1, actions)
     # Sum over actions, y, and x dimensions to combine log_probs from different actions
     # Squeeze out action_planes dimension as well
+    ## This is the problem step - we are summing log probs,
+    ## which is not the same as summing probs and then taking the log
     return torch.flatten(selected_log_probs, start_dim=-3, end_dim=-1).sum(dim=-1).squeeze(dim=-2)
+    """
+
+    # Get the action probabilities
+    probs = F.softmax(behavior_policy_logits, dim=-1)
+    # Ignore probabilities for actions that were not used
+    probs = actions_taken_mask * probs
+    # Select the probabilities for the overlapping actions that were taken and sum these
+    selected_probs = torch.gather(probs, -1, actions).sum(dim=-1)
+    # Remove 0-valued selected_probs in order to eliminate neg-inf valued log_probs
+    selected_probs = selected_probs + torch.where(
+        selected_probs == 0,
+        torch.ones_like(selected_probs),
+        torch.zeros_like(selected_probs)
+    )
+    log_probs = torch.log(selected_probs)
+    # Sum over y and x dimensions to combine log_probs from different actions
+    # Squeeze out action_planes dimension as well
+    return torch.flatten(log_probs, start_dim=-2, end_dim=-1).sum(dim=-1).squeeze(dim=-2)
 
 
 def combine_policy_entropy(
