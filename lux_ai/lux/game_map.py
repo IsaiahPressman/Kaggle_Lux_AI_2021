@@ -102,6 +102,9 @@ class Position:
                 closest_dist = dist
         return closest_dir
 
+    def astuple(self):
+        return self.x, self.y
+
     def __str__(self) -> str:
         return f"({self.x}, {self.y})"
 
