@@ -67,11 +67,15 @@ class DictActor(nn.Module):
             # Move the logits dimension to the end and swap the player and channel dimensions
             logits = logits.permute(0, 3, 1, 4, 5, 2).contiguous()
             # In case all actions are masked, unmask all actions
+            # We first have to cast it to an int tensor to avoid errors in kaggle environment
+            aam = available_actions_mask[key]
+            orig_dtype = aam.dtype
+            aam_new_type = aam.to(dtype=torch.int64)
             aam_filled = torch.where(
-                (~available_actions_mask[key]).all(dim=-1, keepdim=True),
-                torch.ones_like(available_actions_mask[key]),
-                available_actions_mask[key]
-            )
+                (~aam).all(dim=-1, keepdim=True),
+                torch.ones_like(aam_new_type),
+                aam_new_type.to(dtype=torch.int64)
+            ).to(orig_dtype)
             assert logits.shape == aam_filled.shape
             logits = logits + torch.where(
                 aam_filled,
