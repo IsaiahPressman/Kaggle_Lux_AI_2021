@@ -138,26 +138,27 @@ class RLAgent:
 
     def resolve_collision_detection(self, obs, agent_output) -> List[str]:
         # Get log_probs for all of my actions
-        my_flat_log_probs = {
+        flat_log_probs = {
             key: torch.flatten(
-                F.log_softmax(val.squeeze(0)[obs.player], dim=-1),
+                F.log_softmax(val.squeeze(0).squeeze(0), dim=-1),
                 start_dim=-3,
                 end_dim=-2
             ).cpu()
             for key, val in agent_output["policy_logits"].items()
         }
+        my_flat_log_probs = {
+            key: val[obs.player] for key, val in flat_log_probs.items()
+        }
         my_flat_actions = {
             key: torch.flatten(
-                val.squeeze(0)[obs.player],
+                val.squeeze(0).squeeze(0)[obs.player],
                 start_dim=-3,
                 end_dim=-2
             ).cpu()
             for key, val in agent_output["actions"].items()
         }
         # Use actions with highest prob/log_prob as highest priority
-        city_tile_priorities = torch.argsort(my_flat_log_probs["city_tile"].max(dim=-1), dim=-1, descending=True)
-        DEBUG_MESSAGE(f"City_tile_priorities shape: {city_tile_priorities.shape}")
-        DEBUG_MESSAGE(f"City_tile_actions shape: {my_flat_actions['city_tile'].shape}")
+        city_tile_priorities = torch.argsort(my_flat_log_probs["city_tile"].max(dim=-1)[0], dim=-1, descending=True)
 
         # First handle city tile actions, ensuring the unit cap and research cap is not exceeded
         units_to_build = max(self.me.city_tile_count - len(self.me.units), 0)
@@ -187,7 +188,7 @@ class RLAgent:
         occupied_squares = np.zeros(MAX_BOARD_SIZE, dtype=bool)
         max_loc_val = MAX_BOARD_SIZE[0] * MAX_BOARD_SIZE[1]
         combined_unit_log_probs = torch.cat(
-            [my_flat_log_probs["worker"].max(dim=-1), my_flat_log_probs["cart"].max(dim=-1)],
+            [my_flat_log_probs["worker"].max(dim=-1)[0], my_flat_log_probs["cart"].max(dim=-1)[0]],
             dim=-1
         )
         unit_priorities = torch.argsort(combined_unit_log_probs, dim=-1, descending=True)
@@ -208,10 +209,8 @@ class RLAgent:
                     illegal_action = False
                     action_meaning = ACTION_MEANINGS[unit_type][act]
                     if action_meaning.startswith("MOVE_"):
-                        direction = None
-                        new_pos = None
-                        # TODO
-                        raise NotImplementedError
+                        direction = action_meaning.split("_")[1]
+                        new_pos = actionable_list[acted_count].pos.translate(direction, 1)
                     else:
                         new_pos = actionable_list[acted_count].pos
 
@@ -228,8 +227,14 @@ class RLAgent:
                     if acted_count >= len(actionable_list):
                         break
         # Finally, get new actions from modified log_probs
-        # TODO
-        raise NotImplementedError
+        actions_tensors = {
+            key: val.view(1, *val.shape[:-2], *MAX_BOARD_SIZE, -1).argsort(dim=-1, descending=True)
+            for key, val in flat_log_probs.items()
+        }
+        actions, _ = self.unwrapped_env.process_actions({
+            key: value.numpy() for key, value in actions_tensors.items()
+        })
+        actions = actions[obs.player]
         return actions
 
     @property
