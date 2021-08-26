@@ -50,7 +50,8 @@ class DictActor(nn.Module):
             self,
             x: torch.Tensor,
             available_actions_mask: Dict[str, torch.Tensor],
-            sample: bool
+            sample: bool,
+            actions_per_square: Optional[int] = MAX_OVERLAPPING_ACTIONS
     ) -> Tuple[Dict[str, torch.Tensor], Dict[str, torch.Tensor]]:
         """
         Expects an input of shape batch_size * 2, n_channels, h, w
@@ -77,29 +78,31 @@ class DictActor(nn.Module):
                 torch.zeros_like(logits),
                 torch.zeros_like(logits) + float("-inf")
             )
-            actions = DictActor.logits_to_actions(logits.view(-1, n_actions), sample)
+            actions = DictActor.logits_to_actions(logits.view(-1, n_actions), sample, actions_per_square)
             policy_logits_out[key] = logits
             actions_out[key] = actions.view(*logits.shape[:-1], -1)
         return policy_logits_out, actions_out
 
     @staticmethod
     @torch.no_grad()
-    def logits_to_actions(logits: torch.Tensor, sample: bool) -> torch.Tensor:
+    def logits_to_actions(logits: torch.Tensor, sample: bool, actions_per_square: Optional[int]) -> torch.Tensor:
+        if actions_per_square is None:
+            actions_per_square = logits.shape[-1]
         if sample:
             probs = F.softmax(logits, dim=-1)
             # In case there are fewer than MAX_OVERLAPPING_ACTIONS available actions, we add a small eps value
             probs = torch.where(
-                (probs > 0.).sum(dim=-1, keepdim=True) >= MAX_OVERLAPPING_ACTIONS,
+                (probs > 0.).sum(dim=-1, keepdim=True) >= actions_per_square,
                 probs,
                 probs + 1e-10
             )
             return torch.multinomial(
                 probs,
-                num_samples=min(MAX_OVERLAPPING_ACTIONS, probs.shape[-1]),
+                num_samples=min(actions_per_square, probs.shape[-1]),
                 replacement=False
             )
         else:
-            return logits.argsort(dim=-1, descending=True)[..., :MAX_OVERLAPPING_ACTIONS]
+            return logits.argsort(dim=-1, descending=True)[..., :actions_per_square]
 
 
 class MultiLinear(nn.Module):
@@ -205,7 +208,8 @@ class BasicActorCriticNetwork(nn.Module):
     def forward(
             self,
             x: Dict[str, Union[dict, torch.Tensor]],
-            sample: bool = True
+            sample: bool = True,
+            **actor_kwargs
     ) -> Dict[str, Any]:
         x, input_mask, available_actions_mask, subtask_embeddings = self.dict_input_layer(x)
         base_out, _ = self.base_model((x, input_mask))
@@ -214,7 +218,8 @@ class BasicActorCriticNetwork(nn.Module):
         policy_logits, actions = self.actor(
             self.actor_base(base_out),
             available_actions_mask=available_actions_mask,
-            sample=sample
+            sample=sample,
+            **actor_kwargs
         )
         baseline = self.baseline(self.baseline_base(base_out), subtask_embeddings)
         return dict(
