@@ -42,6 +42,7 @@ def get_default_flags(flags: DictConfig) -> DictConfig:
     flags.setdefault("clip_grads", 10.)
     flags.setdefault("checkpoint_freq", 10.)
     flags.setdefault("num_learner_threads", 1)
+    flags.setdefault("use_teacher", False)
 
     # Reloading previous run params
     flags.setdefault("load_dir", None)
@@ -56,7 +57,7 @@ def get_default_flags(flags: DictConfig) -> DictConfig:
     return OmegaConf.create(flags)
 
 
-@hydra.main(config_path="conf", config_name="conv_config")
+@hydra.main(config_path="conf", config_name="RPSA_config")
 def main(flags: DictConfig):
     cli_conf = OmegaConf.from_cli()
     if Path("config.yaml").exists():
