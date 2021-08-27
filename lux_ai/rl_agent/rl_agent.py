@@ -105,7 +105,7 @@ class RLAgent:
         """
 
         value = agent_output["baseline"].squeeze().cpu().numpy()[obs.player]
-        info_msg = f"Turn: {self.game_state.turn}, Predicted value: {value:.2f}"
+        info_msg = f"Turn: {self.game_state.turn} - Predicted value: {value:.2f}"
         actions.append(annotate.sidetext(info_msg))
         RUNTIME_DEBUG_MESSAGE(info_msg)
         return actions
