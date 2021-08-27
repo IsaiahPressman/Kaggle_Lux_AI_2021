@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import logging
 import numpy as np
 from scipy.stats import rankdata
 from typing import Dict, NamedTuple, NoReturn, Tuple
@@ -51,6 +52,9 @@ class BaseRewardSpace(ABC):
     """
     A class used for defining a reward space and/or done state for either the full game or a sub-task
     """
+    def __init__(self, **kwargs):
+        if kwargs:
+            logging.warning(f"RewardSpace received unexpected kwargs: {kwargs}")
 
     @staticmethod
     @abstractmethod
@@ -89,7 +93,8 @@ class GameResultReward(FullGameRewardSpace):
             only_once=True
         )
 
-    def __init__(self, early_stop: bool = False):
+    def __init__(self, early_stop: bool = False, **kwargs):
+        super(GameResultReward, self).__init__(**kwargs)
         self.early_stop = early_stop
 
     def compute_rewards_and_done(self, game_state: Game, done: bool) -> Tuple[Tuple[float, float], bool]:
@@ -169,10 +174,11 @@ class StatefulMultiReward(FullGameRewardSpace):
             # A reward given each step
             "step": 0.,
         }
-        weight_keys = set(k for k in self.weights.keys())
-        self.weights.update(kwargs)
-        if weight_keys != set(self.weights.keys()):
-            raise ValueError(f"Unexpected kwargs: {weight_keys ^ set(self.weights.keys())}")
+        self.weights.update({key: val for key, val in kwargs.items() if key in self.weights.keys()})
+        for key in kwargs.keys():
+            if key in self.weights.keys():
+                del kwargs[key]
+        super(StatefulMultiReward, self).__init__(**kwargs)
         self._reset()
 
     def compute_rewards_and_done(self, game_state: Game, done: bool) -> Tuple[Tuple[float, float], bool]:
@@ -280,10 +286,11 @@ class PunishingExponentialReward(BaseRewardSpace):
             "research": 0.01,
             "fuel": 0.001,
         }
-        weight_keys = set(k for k in self.weights.keys())
-        self.weights.update(kwargs)
-        if weight_keys != set(self.weights.keys()):
-            raise ValueError(f"Unexpected kwargs: {weight_keys ^ set(self.weights.keys())}")
+        self.weights.update({key: val for key, val in kwargs.items() if key in self.weights.keys()})
+        for key in kwargs.keys():
+            if key in self.weights.keys():
+                del kwargs[key]
+        super(PunishingExponentialReward, self).__init__(**kwargs)
         self._reset()
 
     def compute_rewards_and_done(self, game_state: Game, done: bool) -> Tuple[Tuple[float, float], bool]:
@@ -369,7 +376,8 @@ class Subtask(BaseRewardSpace, ABC):
 
 
 class CollectNWood(Subtask):
-    def __init__(self, n: int = GAME_CONSTANTS["PARAMETERS"]["RESOURCE_CAPACITY"]["WORKER"]):
+    def __init__(self, n: int = GAME_CONSTANTS["PARAMETERS"]["RESOURCE_CAPACITY"]["WORKER"], **kwargs):
+        super(CollectNWood, self).__init__(**kwargs)
         self.n = n
 
     def completed_task(self, game_state: Game) -> np.ndarray:
@@ -380,7 +388,8 @@ class CollectNWood(Subtask):
 
 
 class CollectNCoal(Subtask):
-    def __init__(self, n: int = GAME_CONSTANTS["PARAMETERS"]["RESOURCE_CAPACITY"]["WORKER"] // 2):
+    def __init__(self, n: int = GAME_CONSTANTS["PARAMETERS"]["RESOURCE_CAPACITY"]["WORKER"] // 2, **kwargs):
+        super(CollectNCoal, self).__init__(**kwargs)
         self.n = n
 
     def completed_task(self, game_state: Game) -> np.ndarray:
@@ -391,7 +400,8 @@ class CollectNCoal(Subtask):
 
 
 class CollectNUranium(Subtask):
-    def __init__(self, n: int = GAME_CONSTANTS["PARAMETERS"]["RESOURCE_CAPACITY"]["WORKER"] // 5):
+    def __init__(self, n: int = GAME_CONSTANTS["PARAMETERS"]["RESOURCE_CAPACITY"]["WORKER"] // 5, **kwargs):
+        super(CollectNUranium, self).__init__(**kwargs)
         self.n = n
 
     def completed_task(self, game_state: Game) -> np.ndarray:
@@ -402,7 +412,8 @@ class CollectNUranium(Subtask):
 
 
 class MakeNCityTiles(Subtask):
-    def __init__(self, n_city_tiles: int = 2):
+    def __init__(self, n_city_tiles: int = 2, **kwargs):
+        super(MakeNCityTiles, self).__init__(**kwargs)
         assert n_city_tiles > 1, "Players start with 1 city tile already"
         self.n_city_tiles = n_city_tiles
 
@@ -421,7 +432,8 @@ class MakeNContiguousCityTiles(MakeNCityTiles):
 
 class CollectNTotalFuel(Subtask):
     def __init__(self, n_total_fuel: int = GAME_CONSTANTS["PARAMETERS"]["LIGHT_UPKEEP"]["CITY"] *
-                                           GAME_CONSTANTS["PARAMETERS"]["NIGHT_LENGTH"]):
+                                           GAME_CONSTANTS["PARAMETERS"]["NIGHT_LENGTH"], **kwargs):
+        super(CollectNTotalFuel, self).__init__(**kwargs)
         self.n_total_fuel = n_total_fuel
 
     def completed_task(self, game_state: Game) -> np.ndarray:
@@ -429,7 +441,8 @@ class CollectNTotalFuel(Subtask):
 
 
 class SurviveNNights(Subtask):
-    def __init__(self, n_nights: int = 1):
+    def __init__(self, n_nights: int = 1, **kwargs):
+        super(SurviveNNights, self).__init__(**kwargs)
         cycle_len = GAME_CONSTANTS["PARAMETERS"]["DAY_LENGTH"] + GAME_CONSTANTS["PARAMETERS"]["NIGHT_LENGTH"]
         self.target_step = n_nights * cycle_len
         assert self.target_step <= GAME_CONSTANTS["PARAMETERS"]["MAX_DAYS"]
@@ -476,7 +489,12 @@ class SurviveNNights(Subtask):
 
 
 class GetNResearchPoints(Subtask):
-    def __init__(self, n_research_points: int = GAME_CONSTANTS["PARAMETERS"]["RESEARCH_REQUIREMENTS"]["COAL"]):
+    def __init__(
+            self,
+            n_research_points: int = GAME_CONSTANTS["PARAMETERS"]["RESEARCH_REQUIREMENTS"]["COAL"],
+            **kwargs
+    ):
+        super(GetNResearchPoints, self).__init__(**kwargs)
         self.n_research_points = n_research_points
 
     def completed_task(self, game_state: Game) -> np.ndarray:

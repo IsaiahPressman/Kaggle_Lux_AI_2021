@@ -57,7 +57,9 @@ class MultiSubtask(Subtask):
             self,
             subtask_constructors: Sequence[Callable[..., Subtask]] = (),
             subtask_sampler_constructor: Callable[..., SubtaskSampler] = RandomSampler,
+            **kwargs
     ):
+        super(MultiSubtask, self).__init__(**kwargs)
         self.subtask_constructors = subtask_constructors
         self.subtask_sampler = subtask_sampler_constructor(self.subtask_constructors)
         self.active_subtask = self.subtask_sampler.sample(None)

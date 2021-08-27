@@ -258,14 +258,15 @@ def get_batch(
 
 
 def learn(
-    flags: SimpleNamespace,
-    actor_model: nn.Module,
-    learner_model: nn.Module,
-    batch: Dict[str, torch.Tensor],
-    optimizer: torch.optim.Optimizer,
-    grad_scaler: amp.grad_scaler,
-    lr_scheduler: torch.optim.lr_scheduler,
-    lock=threading.Lock(),
+        flags: SimpleNamespace,
+        actor_model: nn.Module,
+        learner_model: nn.Module,
+        batch: Dict[str, torch.Tensor],
+        optimizer: torch.optim.Optimizer,
+        grad_scaler: amp.grad_scaler,
+        lr_scheduler: torch.optim.lr_scheduler,
+        baseline_only: bool = False,
+        lock=threading.Lock(),
 ):
     """Performs a learning (optimization) step."""
     with acquire_timeout(lock, LOCK_TIMEOUT):
@@ -371,7 +372,11 @@ def learn(
                 combined_learner_entropy,
                 reduction=flags.reduction
             )
-            total_loss = vtrace_pg_loss + upgo_pg_loss + baseline_loss + entropy_loss
+            if baseline_only:
+                total_loss = baseline_loss
+                vtrace_pg_loss, upgo_pg_loss, entropy_loss = torch.zeros(3) + float("nan")
+            else:
+                total_loss = vtrace_pg_loss + upgo_pg_loss + baseline_loss + entropy_loss
 
             # Pure Vtrace losses
             """
@@ -500,7 +505,7 @@ def train(flags):
         learner_model.parameters(),
         **flags.optimizer_kwargs
     )
-    if checkpoint_state is not None:
+    if checkpoint_state is not None and not flags.weights_only:
         optimizer.load_state_dict(checkpoint_state["optimizer_state_dict"])
 
     def lr_lambda(epoch):
@@ -511,7 +516,7 @@ def train(flags):
 
     grad_scaler = amp.GradScaler()
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
-    if checkpoint_state is not None:
+    if checkpoint_state is not None and not flags.weights_only:
         scheduler.load_state_dict(checkpoint_state["scheduler_state_dict"])
 
     step, stats = 0, {}
@@ -535,7 +540,14 @@ def train(flags):
                 batches = [full_batch]
             for batch in batches:
                 stats = learn(
-                    flags, actor_model, learner_model, batch, optimizer, grad_scaler, scheduler
+                    flags=flags,
+                    actor_model=actor_model,
+                    learner_model=learner_model,
+                    batch=batch,
+                    optimizer=optimizer,
+                    grad_scaler=grad_scaler,
+                    lr_scheduler=scheduler,
+                    baseline_only=step / (t * b) < flags.n_value_warmup_batches,
                 )
                 with acquire_timeout(lock, LOCK_TIMEOUT):
                     step += t * b
@@ -582,7 +594,7 @@ def train(flags):
                 last_checkpoint_time = timer()
 
             sps = (step - start_step) / (timer() - start_time)
-            bps = (step - start_step) / (flags.batch_size * flags.unroll_length) / (timer() - start_time)
+            bps = (step - start_step) / (t * b) / (timer() - start_time)
             logging.info(f"Steps {step:d} @ {sps:.1f} SPS / {bps:.1f} BPS. Stats:\n{pprint.pformat(stats)}")
     except KeyboardInterrupt:
         # Try checkpointing and joining actors then quit.

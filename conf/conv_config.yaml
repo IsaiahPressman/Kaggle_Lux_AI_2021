@@ -36,7 +36,7 @@ discounting: 0.999
 
 ## MODEL params
 model_arch: conv_model
-n_blocks: 4
+n_blocks: 8
 hidden_dim: 128
 n_merge_layers: 1
 normalize: False
@@ -70,5 +70,7 @@ model_log_freq: 100
 sharing_strategy: file_descriptor
 
 # Continue from previous run
-#load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/2021-08-10/11-28-49/
-#checkpoint_file: 001653120.pt
+load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/2021-08-26/01-56-09/
+checkpoint_file: 011652608.pt
+weights_only: True
+n_value_warmup_batches: 500

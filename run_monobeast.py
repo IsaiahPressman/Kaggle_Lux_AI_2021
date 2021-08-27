@@ -43,8 +43,13 @@ def get_default_flags(flags: DictConfig) -> DictConfig:
     flags.setdefault("checkpoint_freq", 10.)
     flags.setdefault("num_learner_threads", 1)
 
-    # Miscellaneous params
+    # Reloading previous run params
     flags.setdefault("load_dir", None)
+    flags.setdefault("checkpoint_file", None)
+    flags.setdefault("weights_only", False)
+    flags.setdefault("n_value_warmup_batches", 0)
+
+    # Miscellaneous params
     flags.setdefault("disable_wandb", False)
     flags.setdefault("debug", False)
 
@@ -58,7 +63,7 @@ def main(flags: DictConfig):
         new_flags = OmegaConf.load("config.yaml")
         flags = OmegaConf.merge(new_flags, cli_conf)
 
-    if flags.get("load_dir", None):
+    if flags.get("load_dir", None) and not flags.get("weights_only", False):
         # this ignores the local config.yaml and replaces it completely with saved one
         # however, you can override parameters from the cli still
         # this is useful e.g. if you did total_steps=N before and want to increase it
