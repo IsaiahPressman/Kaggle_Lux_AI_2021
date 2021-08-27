@@ -70,7 +70,7 @@ model_log_freq: 100
 sharing_strategy: file_descriptor
 
 # Continue from previous run
-load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/2021-08-26/01-56-09/
-checkpoint_file: 011652608.pt
-weights_only: True
-n_value_warmup_batches: 500
+load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/2021-08-26/19-50-22/
+checkpoint_file: 001153024.pt
+weights_only: False
+n_value_warmup_batches: 0
