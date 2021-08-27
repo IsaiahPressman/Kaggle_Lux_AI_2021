@@ -19,6 +19,11 @@ def DEBUG_MESSAGE(msg: Any) -> NoReturn:
     print(msg, file=sys.stderr)
 
 
+def RUNTIME_DEBUG_MESSAGE(msg: Any) -> NoReturn:
+    if not LOCAL_EVAL:
+        DEBUG_MESSAGE(msg)
+
+
 def RUNTIME_ASSERT(statement: bool, msg: Any = "") -> NoReturn:
     """
     Asserts a statement, but only raises an error during local evaluation.

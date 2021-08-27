@@ -9,7 +9,7 @@ import yaml
 
 from ..lux_gym import create_reward_space, LuxEnv, wrappers
 from ..lux_gym.act_spaces import MAX_BOARD_SIZE, ACTION_MEANINGS
-from ..handcrafted_agents.utils import get_city_tiles, DEBUG_MESSAGE, RUNTIME_ASSERT
+from ..handcrafted_agents.utils import get_city_tiles, DEBUG_MESSAGE, RUNTIME_DEBUG_MESSAGE, RUNTIME_ASSERT
 from ..handcrafted_agents.utility_constants import MAX_RESEARCH
 from ..nns import create_model
 from ..utils import flags_to_namespace
@@ -104,9 +104,10 @@ class RLAgent:
         actions.append(annotate.sidetext(f"Research points: {player.research_points}"))
         """
 
-        #actions.append(annotate.sidetext(f"Turn: {self.game_state.turn}"))
         value = agent_output["baseline"].squeeze().cpu().numpy()[obs.player]
-        actions.append(annotate.sidetext(f"Predicted value: {value:.2f}"))
+        info_msg = f"Turn: {self.game_state.turn}, Predicted value: {value:.2f}"
+        actions.append(annotate.sidetext(info_msg))
+        RUNTIME_DEBUG_MESSAGE(info_msg)
         return actions
 
     def preprocess(self, obs, conf) -> NoReturn:
