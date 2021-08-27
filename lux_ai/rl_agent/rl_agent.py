@@ -41,7 +41,7 @@ class RLAgent:
             self.model_flags = flags_to_namespace(yaml.safe_load(stream))
         with open(RL_AGENT_CONFIG_PATH, 'r') as stream:
             self.agent_flags = SimpleNamespace(**yaml.safe_load(stream))
-        self.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+        self.device = torch.device(self.agent_flags.device) if torch.cuda.is_available() else torch.device('cpu')
         # self.device = torch.device('cpu')
         env = LuxEnv(
             act_space=self.model_flags.act_space(),

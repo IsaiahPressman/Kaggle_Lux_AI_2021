@@ -20,10 +20,9 @@ obs_space_kwargs:
 reward_space: StatefulMultiReward
 reward_space_kwargs:
   #early_stop: True
-  #negative_weight: 1.01
-  #research: 0.01
+  #city: 2.
+  #unit: 1.
   #fuel: 0.
-  #game_result: 50.
   step: 0.005
 
 ## TRAINING params
@@ -36,7 +35,7 @@ discounting: 0.999
 
 ## MODEL params
 model_arch: conv_model
-n_blocks: 8
+n_blocks: 4
 hidden_dim: 128
 n_merge_layers: 1
 normalize: False
@@ -57,9 +56,15 @@ min_lr_mod: 0.01
 ## LOSS params
 entropy_cost: 0.001
 baseline_cost: 2.
+teacher_kl_cost: 0.005
 # lambda parameter for TD-lambda and UPGO losses
 lmb: 0.8
 reduction: sum
+
+# Pretrained model for KL loss
+use_teacher: True
+teacher_load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/2021-08-26/19-50-22/
+teacher_checkpoint_file: 001153024.pt
 
 # MISCELLANEOUS params
 actor_device: cuda:1
@@ -70,7 +75,7 @@ model_log_freq: 100
 sharing_strategy: file_descriptor
 
 # Continue from previous run
-load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/2021-08-26/19-50-22/
-checkpoint_file: 001153024.pt
-weights_only: False
-n_value_warmup_batches: 0
+#load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/2021-08-26/19-50-22/
+#checkpoint_file: 001153024.pt
+#weights_only: False
+#n_value_warmup_batches: 0

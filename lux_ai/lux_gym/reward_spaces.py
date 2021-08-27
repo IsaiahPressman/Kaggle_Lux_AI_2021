@@ -224,7 +224,7 @@ class StatefulMultiReward(FullGameRewardSpace):
             axis=0
         ).sum(axis=0)
 
-        return tuple(reward / 1000. / max(self.positive_weight, self.negative_weight))
+        return tuple(reward / 500. / max(self.positive_weight, self.negative_weight))
 
     def weight_rewards(self, reward: np.ndarray) -> np.ndarray:
         reward = np.where(
