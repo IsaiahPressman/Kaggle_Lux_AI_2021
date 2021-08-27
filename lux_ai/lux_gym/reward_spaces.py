@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import copy
 import logging
 import numpy as np
 from scipy.stats import rankdata
@@ -175,7 +176,7 @@ class StatefulMultiReward(FullGameRewardSpace):
             "step": 0.,
         }
         self.weights.update({key: val for key, val in kwargs.items() if key in self.weights.keys()})
-        for key in kwargs.keys():
+        for key in copy.copy(kwargs.keys()):
             if key in self.weights.keys():
                 del kwargs[key]
         super(StatefulMultiReward, self).__init__(**kwargs)
@@ -287,7 +288,7 @@ class PunishingExponentialReward(BaseRewardSpace):
             "fuel": 0.001,
         }
         self.weights.update({key: val for key, val in kwargs.items() if key in self.weights.keys()})
-        for key in kwargs.keys():
+        for key in copy.copy(kwargs.keys()):
             if key in self.weights.keys():
                 del kwargs[key]
         super(PunishingExponentialReward, self).__init__(**kwargs)
