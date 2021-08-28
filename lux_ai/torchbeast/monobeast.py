@@ -351,10 +351,7 @@ def learn(
                         any_actions_taken
                     )
                 else:
-                    teacher_kl_loss = torch.zeros(
-                        learner_policy_logits.shape[:-2],
-                        device=flags.learner_device
-                    ).squeeze(dim=-2)
+                    teacher_kl_loss = torch.zeros_like(combined_teacher_kl_loss)
                 combined_teacher_kl_loss = combined_teacher_kl_loss + teacher_kl_loss
                 teacher_kl_losses[act_space] = (reduce(
                     teacher_kl_loss,

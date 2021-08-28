@@ -260,7 +260,6 @@ class ViTBlock(nn.Module):
             self,
             in_channels: int,
             out_channels: int,
-            n_heads: int,
             height: int,
             width: int,
             mhsa_layer: nn.Module,

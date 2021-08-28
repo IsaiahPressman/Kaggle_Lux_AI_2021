@@ -41,7 +41,6 @@ def create_model(flags, device: torch.device) -> nn.Module:
             *[ViTBlock(
                 in_channels=flags.hidden_dim,
                 out_channels=flags.hidden_dim,
-                n_heads=flags.n_heads,
                 height=MAX_BOARD_SIZE[0],
                 width=MAX_BOARD_SIZE[1],
                 mhsa_layer=RPSA(
@@ -64,7 +63,6 @@ def create_model(flags, device: torch.device) -> nn.Module:
             *[ViTBlock(
                 in_channels=flags.hidden_dim,
                 out_channels=flags.hidden_dim,
-                n_heads=flags.n_heads,
                 height=MAX_BOARD_SIZE[0],
                 width=MAX_BOARD_SIZE[1],
                 mhsa_layer=GPSA(

@@ -35,10 +35,10 @@ discounting: 0.999
 
 ## MODEL params
 model_arch: RPSA_model
-n_blocks: 8
+n_blocks: 4
 hidden_dim: 256
 n_merge_layers: 1
-normalize: True
+normalize: False
 use_index_select: True
 # Attention-specific params
 n_heads: 2
