@@ -234,7 +234,7 @@ class _FixedShapeContinuousObsWrapper(gym.Wrapper):
                 if cell.has_resource():
                     obs[f"{cell.resource.type}"][0, 0, x, y] = cell.resource.amount / MAX_RESOURCE[cell.resource.type]
 
-            obs["research_points"][0, p_id] = player.research_points / max_research
+            obs["research_points"][0, p_id] = min(player.research_points / max_research, 1.)
             obs["researched_coal"][0, p_id] = player.researched_coal()
             obs["researched_uranium"][0, p_id] = player.researched_uranium()
         dn_cycle_len = GAME_CONSTANTS["PARAMETERS"]["DAY_LENGTH"] + GAME_CONSTANTS["PARAMETERS"]["NIGHT_LENGTH"]
@@ -483,7 +483,7 @@ class _FixedShapeEmbeddingObsWrapper(gym.Wrapper):
             """
             obs["research_points"][0, p_id] = player.research_points
             """
-            obs["research_points"][0, p_id] = player.research_points / max_research
+            obs["research_points"][0, p_id] = min(player.research_points / max_research, 1.)
             obs["researched_coal"][0, p_id] = player.researched_coal()
             obs["researched_uranium"][0, p_id] = player.researched_uranium()
         dn_cycle_len = GAME_CONSTANTS["PARAMETERS"]["DAY_LENGTH"] + GAME_CONSTANTS["PARAMETERS"]["NIGHT_LENGTH"]
@@ -734,12 +734,12 @@ class _SequenceEmbeddingObsWrapper(gym.Wrapper):
         for p_id in (0, 1):
             player = observation.players[p_id]
             if p_id == 0:
-                obs["research_points"][:, :] = player.research_points / max_research
+                obs["research_points"][:, :] = min(player.research_points / max_research, 1.)
                 obs["researched_coal"][:, :] = player.researched_coal()
                 obs["researched_uranium"][:, :] = player.researched_uranium()
             else:
-                obs["research_points"][0, 1] = player.research_points / max_research
-                obs["research_points"][1, 0] = player.research_points / max_research
+                obs["research_points"][0, 1] = min(player.research_points / max_research, 1.)
+                obs["research_points"][1, 0] = min(player.research_points / max_research, 1.)
                 obs["researched_coal"][0, 1] = player.researched_coal()
                 obs["researched_coal"][1, 0] = player.researched_coal()
                 obs["researched_uranium"][0, 1] = player.researched_uranium()
