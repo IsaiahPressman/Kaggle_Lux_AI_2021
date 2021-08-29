@@ -2,8 +2,11 @@ defaults:
 - override hydra/job_logging: colorlog
 - override hydra/hydra_logging: colorlog
 
-name: null
+hydra:
+  run:
+    dir: ./outputs/${now:%m-%d}/${now:%H-%M-%S}
 
+name: null
 ## WANDB params
 # The wandb project name
 project: Lux_AI_2021

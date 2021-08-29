@@ -2,8 +2,11 @@ defaults:
 - override hydra/job_logging: colorlog
 - override hydra/hydra_logging: colorlog
 
-name: null
+hydra:
+  run:
+    dir: ./outputs/${now:%m-%d}/${now:%H-%M-%S}
 
+name: null
 ## WANDB params
 # The wandb project name
 project: Lux_AI_2021
@@ -63,7 +66,7 @@ reduction: sum
 
 # Pretrained model for KL loss
 use_teacher: True
-teacher_load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/2021-08-26/22-04-28/
+teacher_load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/08-26/22-04-28/
 teacher_checkpoint_file: 006002048.pt
 
 # MISCELLANEOUS params
@@ -75,7 +78,7 @@ model_log_freq: 100
 sharing_strategy: file_descriptor
 
 # Continue from previous run
-load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/2021-08-27/21-47-06/
+load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/08-27/21-47-06/
 checkpoint_file: 00515136.pt
 weights_only: True
 #n_value_warmup_batches: 0
