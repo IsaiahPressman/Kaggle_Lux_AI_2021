@@ -191,6 +191,8 @@ class BasicActorCriticNetwork(nn.Module):
 
         actor_layers = []
         baseline_layers = []
+        if n_action_value_layers < 2:
+            raise ValueError("n_action_value_layers must be >= 2 in order to use spectral_norm")
         for i in range(n_action_value_layers - 1):
             actor_layers.append(
                 nn.utils.spectral_norm(nn.Conv2d(self.base_out_channels, self.base_out_channels, (1, 1)))
