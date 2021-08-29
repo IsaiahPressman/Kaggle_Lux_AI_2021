@@ -9,15 +9,13 @@ import yaml
 
 from ..lux_gym import create_reward_space, LuxEnv, wrappers
 from ..lux_gym.act_spaces import MAX_BOARD_SIZE, ACTION_MEANINGS
-from ..handcrafted_agents.utils import get_city_tiles, DEBUG_MESSAGE, RUNTIME_DEBUG_MESSAGE, RUNTIME_ASSERT
+from ..handcrafted_agents.utils import get_city_tiles, DEBUG_MESSAGE, RUNTIME_DEBUG_MESSAGE
 from ..handcrafted_agents.utility_constants import MAX_RESEARCH
 from ..nns import create_model
 from ..utils import flags_to_namespace
 
 from ..lux.game import Game
-from ..lux.game_map import Cell
 from ..lux.constants import Constants
-from ..lux.game_constants import GAME_CONSTANTS
 from ..lux.game_objects import CityTile, Unit
 from ..lux import annotate
 
@@ -37,11 +35,11 @@ def pos_to_loc(pos: Tuple[int, int], board_dims: Tuple[int, int] = MAX_BOARD_SIZ
 
 class RLAgent:
     def __init__(self, obs, conf):
-        with open(MODEL_CONFIG_PATH, 'r') as stream:
-            self.model_flags = flags_to_namespace(yaml.safe_load(stream))
-        with open(RL_AGENT_CONFIG_PATH, 'r') as stream:
-            self.agent_flags = SimpleNamespace(**yaml.safe_load(stream))
-        self.device = torch.device(self.agent_flags.device) if torch.cuda.is_available() else torch.device('cpu')
+        with open(MODEL_CONFIG_PATH, 'r') as f:
+            self.model_flags = flags_to_namespace(yaml.safe_load(f))
+        with open(RL_AGENT_CONFIG_PATH, 'r') as f:
+            self.agent_flags = SimpleNamespace(**yaml.safe_load(f))
+        self.device = torch.device(self.agent_flags.device) if torch.cuda.is_available() else torch.device("cpu")
         # self.device = torch.device('cpu')
         env = LuxEnv(
             act_space=self.model_flags.act_space(),
@@ -171,11 +169,13 @@ class RLAgent:
                 for i, act in enumerate(actions):
                     illegal_action = False
                     action_meaning = ACTION_MEANINGS["city_tile"][act]
+                    # Check that the city will not build more units than the unit cap
                     if action_meaning.startswith("BUILD_"):
                         if units_to_build > 0:
                             units_to_build -= 1
                         else:
                             illegal_action = True
+                    # Check that the city will not research more than the research cap
                     elif action_meaning == "RESEARCH":
                         if research_remaining > 0:
                             research_remaining -= 1
@@ -185,6 +185,7 @@ class RLAgent:
                         my_flat_log_probs["city_tile"][loc, act] = float("-inf")
                     else:
                         break
+
         # Then handle unit actions, ensuring that no units try to move to the same square
         occupied_squares = np.zeros(MAX_BOARD_SIZE, dtype=bool)
         max_loc_val = MAX_BOARD_SIZE[0] * MAX_BOARD_SIZE[1]
@@ -215,7 +216,14 @@ class RLAgent:
                     else:
                         new_pos = actionable_list[acted_count].pos
 
-                    if occupied_squares[new_pos.x, new_pos.y] and not self.my_city_tile_mat[new_pos.x, new_pos.y]:
+                    # Check that the new position is a legal square
+                    if (
+                            new_pos.x < 0 or new_pos.x >= self.game_state.map_width or
+                            new_pos.y < 0 or new_pos.y >= self.game_state.map_height
+                    ):
+                        illegal_action = True
+                    # Check that the new position does not conflict with another unit's new position
+                    elif occupied_squares[new_pos.x, new_pos.y] and not self.my_city_tile_mat[new_pos.x, new_pos.y]:
                         illegal_action = True
                     else:
                         occupied_squares[new_pos.x, new_pos.y] = True
@@ -227,7 +235,8 @@ class RLAgent:
 
                     if acted_count >= len(actionable_list):
                         break
-        # Finally, get new actions from modified log_probs
+
+        # Finally, get new actions from the modified log_probs
         actions_tensors = {
             key: val.view(1, *val.shape[:-2], *MAX_BOARD_SIZE, -1).argsort(dim=-1, descending=True)
             for key, val in flat_log_probs.items()
