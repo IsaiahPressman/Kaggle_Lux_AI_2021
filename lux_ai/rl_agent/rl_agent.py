@@ -17,10 +17,12 @@ from ..utils import flags_to_namespace
 from ..lux.game import Game
 from ..lux.constants import Constants
 from ..lux.game_objects import CityTile, Unit
+from ..lux.game_constants import GAME_CONSTANTS
 from ..lux import annotate
 
 DIRECTIONS = Constants.DIRECTIONS
 RESOURCE_TYPES = Constants.RESOURCE_TYPES
+DN_CYCLE_LEN = GAME_CONSTANTS["PARAMETERS"]["DAY_LENGTH"] + GAME_CONSTANTS["PARAMETERS"]["NIGHT_LENGTH"]
 MODEL_CONFIG_PATH = Path(__file__).parent / "config.yaml"
 RL_AGENT_CONFIG_PATH = Path(__file__).parent / "rl_agent_config.yaml"
 CHECKPOINT_PATH, = list(Path(__file__).parent.glob('*.pt'))
@@ -181,6 +183,16 @@ class RLAgent:
                             research_remaining -= 1
                         else:
                             illegal_action = True
+                    # Ban no-ops after the first night until research is complete
+                    # This might prevent games like this from happening:
+                    # https://www.kaggle.com/c/lux-ai-2021/submissions?dialog=episodes-episode-26458475
+                    elif (
+                            action_meaning == "NO-OP" and
+                            self.game_state.turn >= DN_CYCLE_LEN and
+                            research_remaining > 0 and
+                            self.agent_flags.must_research
+                    ):
+                        illegal_action = True
                     if illegal_action:
                         my_flat_log_probs["city_tile"][loc, act] = float("-inf")
                     else:
