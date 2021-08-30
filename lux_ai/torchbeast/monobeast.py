@@ -37,6 +37,7 @@ from .core import prof, td_lambda, upgo, vtrace
 from .core.buffer_utils import Buffers, create_buffers, fill_buffers_inplace, stack_buffers, split_buffers, \
     buffers_apply
 from ..lux_gym import create_env
+from ..lux_gym.act_spaces import ACTION_MEANINGS
 from ..nns import create_model
 from ..utils import flags_to_namespace
 
@@ -430,11 +431,45 @@ def learn(
             last_lr = lr_scheduler.get_last_lr()
             assert len(last_lr) == 1, 'Logging per-parameter LR still needs support'
             last_lr = last_lr[0]
+            action_distributions_flat = {
+                key[16:]: val[batch["done"]][~val[batch["done"]].isnan()].sum().item()
+                for key, val in batch["info"].items()
+                if key.startswith("LOGGING_") and "ACTIONS_" in key
+            }
+            action_distributions = {space: {} for space in ACTION_MEANINGS.keys()}
+            for flat_name, n in action_distributions_flat.items():
+                space, meaning = flat_name.split(".")
+                action_distributions[space][meaning] = n
+            action_distributions_aggregated = {}
+            for space, dist in action_distributions.items():
+                if space == "city_tile":
+                    action_distributions_aggregated[space] = dist
+                elif space in ("cart", "worker"):
+                    aggregated = {
+                        a: n for a, n in dist.items() if "TRANSFER" not in a
+                    }
+                    aggregated["TRANSFER"] = sum({a: n for a, n in dist.items() if "TRANSFER" in a}.values())
+                    aggregated["MOVE"] = sum({a: n for a, n in dist.items() if "MOVE" in a}.values())
+                    action_distributions_aggregated[space] = aggregated
+                else:
+                    raise RuntimeError(f"Unrecognized action_space: {space}")
+                n_actions = sum(action_distributions_aggregated[space].values())
+                if n_actions == 0:
+                    action_distributions_aggregated[space] = {
+                        key: float("nan") for key in action_distributions_aggregated[space].keys()
+                    }
+                else:
+                    action_distributions_aggregated[space] = {
+                        key: val / n_actions for key, val in action_distributions_aggregated[space].items()
+                    }
+
             stats = {
                 "Env": {
                     key[8:]: val[batch["done"]][~val[batch["done"]].isnan()].mean().item()
-                    for key, val in batch["info"].items() if key.startswith("LOGGING_")
+                    for key, val in batch["info"].items()
+                    if key.startswith("LOGGING_") and "ACTIONS_" not in key
                 },
+                "Actions": action_distributions_aggregated,
                 "Loss": {
                     "vtrace_pg_loss": vtrace_pg_loss.detach().item(),
                     "upgo_pg_loss": upgo_pg_loss.detach().item(),
@@ -576,6 +611,12 @@ def train(flags):
         scheduler.load_state_dict(checkpoint_state["scheduler_state_dict"])
 
     step, stats = 0, {}
+    if checkpoint_state is not None and not flags.weights_only:
+        if "step" in checkpoint_state.keys():
+            step = checkpoint_state["step"]
+        # Backwards compatibility
+        else:
+            logging.warning("Loading old checkpoint_state without 'step' saved. Starting at step 0.")
 
     def batch_and_learn(learner_idx, lock=threading.Lock()):
         """Thread target for the learning process."""
@@ -632,6 +673,7 @@ def train(flags):
                 "model_state_dict": actor_model.state_dict(),
                 "optimizer_state_dict": optimizer.state_dict(),
                 "scheduler_state_dict": scheduler.state_dict(),
+                "step": step
             },
             checkpoint_path + ".pt",
         )
