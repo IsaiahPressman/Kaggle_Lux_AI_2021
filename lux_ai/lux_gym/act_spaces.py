@@ -165,6 +165,11 @@ class BaseActSpace(ABC):
     ) -> Dict[str, np.ndarray]:
         pass
 
+    @staticmethod
+    @abstractmethod
+    def actions_taken_to_distributions(actions_taken: Dict[str, np.ndarray]) -> Dict[str, Dict[str, int]]:
+        pass
+
 
 class BasicActionSpace(BaseActSpace):
     def __init__(self, default_board_dims: Optional[Tuple[int, int]] = None):
@@ -281,7 +286,10 @@ class BasicActionSpace(BaseActSpace):
                     #   The unit is at the edge of the board and would try to move off of it
                     #   The unit would move onto an opposing city tile
                     #   The unit would move onto another unit with cooldown > 0
-                    # Transferring is only a legal action when there is an allied unit in the target square
+                    # Transferring is only a legal action when:
+                    #   There is an allied unit in the target square
+                    #   The transferring unit has > 0 cargo of the designated resource
+                    #   The receiving unit has cargo space remaining
                     # Workers: Pillaging is only a legal action when on a road tile and is not on an allied city
                     # Workers: Building a city is only a legal action when the worker has the required resources and
                     #       is not on a resource tile
@@ -326,9 +334,15 @@ class BasicActionSpace(BaseActSpace):
                                 y,
                                 ACTION_MEANINGS_TO_IDX[unit_type][f"MOVE_{direction}"]
                             ] = False
-                        # Transferring - check that there is an allied unit in the target square
-                        if new_pos_unit is None or new_pos_unit.team != p_id:
-                            for resource in RESOURCES:
+                        for resource in RESOURCES:
+                            if (
+                                    # Transferring - check that there is an allied unit in the target square
+                                    (new_pos_unit is None or new_pos_unit.team != p_id) or
+                                    # Transferring - check that the transferring unit has the designated resource
+                                    (unit.cargo.get(resource) <= 0) or
+                                    # Transferring - check that the receiving unit has cargo space
+                                    (new_pos_unit.get_cargo_space_left() <= 0)
+                            ):
                                 available_actions_mask[unit_type][
                                     :,
                                     p_id,
@@ -387,6 +401,16 @@ class BasicActionSpace(BaseActSpace):
                                 ACTION_MEANINGS_TO_IDX["city_tile"]["BUILD_CART"]
                             ] = False
         return available_actions_mask
+
+    @staticmethod
+    def actions_taken_to_distributions(actions_taken: Dict[str, np.ndarray]) -> Dict[str, Dict[str, int]]:
+        out = {}
+        for space, actions in actions_taken.items():
+            out[space] = {
+                ACTION_MEANINGS[space][i]: actions[..., i].sum()
+                for i in range(actions.shape[-1])
+            }
+        return out
 
 
 def get_unit_action(unit: Unit, action_idx: int, pos_to_unit_dict: Dict[Tuple, Optional[Unit]]) -> Optional[str]:

@@ -95,6 +95,16 @@ class Cargo:
         self.coal = 0
         self.uranium = 0
 
+    def get(self, resource_type: str) -> int:
+        if resource_type == Constants.RESOURCE_TYPES.WOOD:
+            return self.wood
+        elif resource_type == Constants.RESOURCE_TYPES.COAL:
+            return self.coal
+        elif resource_type == Constants.RESOURCE_TYPES.URANIUM:
+            return self.uranium
+        else:
+            raise ValueError(f"Unrecognized resource_type: {resource_type}")
+
     def __str__(self) -> str:
         return f"Cargo | Wood: {self.wood}, Coal: {self.coal}, Uranium: {self.uranium}"
 
