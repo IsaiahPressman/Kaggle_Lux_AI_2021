@@ -4,6 +4,7 @@ import numpy as np
 import torch
 from typing import Dict, List, NoReturn, Optional, Tuple, Union
 
+from .act_spaces import ACTION_MEANINGS
 from .lux_env import LuxEnv
 from .obs_spaces import MAX_BOARD_SIZE, SUBTASK_ENCODING
 from .reward_spaces import BaseRewardSpace, Subtask
@@ -100,6 +101,11 @@ class LoggingEnv(gym.Wrapper):
         self.reward_space = reward_space
         self.vals_peak = {}
         self.reward_sums = [0., 0.]
+        self.actions_distributions = {
+            f"{space}.{meaning}": 0.
+            for space, action_meanings in ACTION_MEANINGS.items()
+            for meaning in action_meanings
+        }
         # TODO: Resource mining % like in visualizer?
         # self.resource_count = {"wood", etc...}
         # TODO: Fuel metric?
@@ -124,6 +130,15 @@ class LoggingEnv(gym.Wrapper):
         logs["mean_cumulative_rewards"] = [np.mean(self.reward_sums)]
         logs["mean_cumulative_reward_magnitudes"] = [np.mean(np.abs(self.reward_sums))]
         logs["max_cumulative_rewards"] = [np.max(self.reward_sums)]
+
+        actions_taken = self.env.unwrapped.action_space.actions_taken_to_distributions(info["actions_taken"])
+        self.actions_distributions = {
+            f"{space}.{act}": self.actions_distributions[f"{space}.{act}"] + n
+            for space, dist in actions_taken.items()
+            for act, n in dist.items()
+        }
+        logs.update({f"ACTIONS_{key}": val for key, val in self.actions_distributions.items()})
+
         info.update({f"LOGGING_{key}": np.array(val, dtype=np.float32) for key, val in logs.items()})
         # Add any additional info from the reward space
         info.update(self.reward_space.get_info())
@@ -133,6 +148,9 @@ class LoggingEnv(gym.Wrapper):
         obs, reward, done, info = super(LoggingEnv, self).reset(**kwargs)
         self._reset_peak_vals()
         self.reward_sums = [0., 0.]
+        self.actions_distributions = {
+            key: 0. for key in self.actions_distributions.keys()
+        }
         return obs, reward, done, self.info(info, reward)
 
     def step(self, action: Dict[str, np.ndarray]):

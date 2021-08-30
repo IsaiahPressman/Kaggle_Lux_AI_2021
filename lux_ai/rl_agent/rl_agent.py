@@ -23,6 +23,7 @@ from ..lux import annotate
 DIRECTIONS = Constants.DIRECTIONS
 RESOURCE_TYPES = Constants.RESOURCE_TYPES
 DN_CYCLE_LEN = GAME_CONSTANTS["PARAMETERS"]["DAY_LENGTH"] + GAME_CONSTANTS["PARAMETERS"]["NIGHT_LENGTH"]
+
 MODEL_CONFIG_PATH = Path(__file__).parent / "config.yaml"
 RL_AGENT_CONFIG_PATH = Path(__file__).parent / "rl_agent_config.yaml"
 CHECKPOINT_PATH, = list(Path(__file__).parent.glob('*.pt'))
