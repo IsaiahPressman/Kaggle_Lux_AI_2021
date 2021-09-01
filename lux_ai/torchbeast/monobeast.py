@@ -609,6 +609,11 @@ def train(flags):
         # Backwards compatibility
         else:
             logging.warning("Loading old checkpoint_state without 'step' saved. Starting at step 0.")
+        if "total_games_played" in checkpoint_state.keys():
+            total_games_played = checkpoint_state["total_games_played"]
+        # Backwards compatibility
+        else:
+            logging.warning("Loading old checkpoint_state without 'total_games_played' saved. Starting at step 0.")
 
     def batch_and_learn(learner_idx, lock=threading.Lock()):
         """Thread target for the learning process."""
@@ -645,7 +650,7 @@ def train(flags):
                     if not flags.disable_wandb:
                         wandb.log(stats, step=step)
             timings.time("learn")
-            if learner_idx == 0:
+            if learner_idx == 0 and flags.show_timings:
                 logging.info(f"Batch and learn timing statistics: {timings.summary()}")
 
     for m in range(flags.num_buffers):
@@ -666,7 +671,8 @@ def train(flags):
                 "model_state_dict": actor_model.state_dict(),
                 "optimizer_state_dict": optimizer.state_dict(),
                 "scheduler_state_dict": scheduler.state_dict(),
-                "step": step
+                "step": step,
+                "total_games_played": total_games_played,
             },
             checkpoint_path + ".pt",
         )
