@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from contextlib import contextmanager
 import logging
 import math
 from omegaconf import OmegaConf
@@ -23,7 +22,7 @@ import time
 import timeit
 import traceback
 from types import SimpleNamespace
-from typing import Dict, Optional, Union
+from typing import Dict, Optional, Tuple, Union
 import wandb
 import warnings
 
@@ -42,7 +41,6 @@ from ..nns import create_model
 from ..utils import flags_to_namespace
 
 
-LOCK_TIMEOUT = 2.
 KL_DIV_LOSS = nn.KLDivLoss(reduction="none")
 # TODO: Reformat logging
 logging.basicConfig(
@@ -173,15 +171,6 @@ def compute_policy_gradient_loss(
     return reduce(cross_entropy * advantages.detach(), reduction)
 
 
-# From https://stackoverflow.com/questions/16740104/python-lock-with-statement-and-timeout
-@contextmanager
-def acquire_timeout(lock: threading.Lock, timeout: float):
-    result = lock.acquire(timeout=timeout)
-    yield result
-    if result:
-        lock.release()
-
-
 @torch.no_grad()
 def act(
     flags: SimpleNamespace,
@@ -262,7 +251,7 @@ def get_batch(
     timings: prof.Timings,
     lock=threading.Lock(),
 ):
-    with acquire_timeout(lock, LOCK_TIMEOUT):
+    with lock:
         timings.time("lock")
         indices = [full_queue.get() for _ in range(max(flags.batch_size // flags.n_actor_envs, 1))]
         timings.time("dequeue")
@@ -285,11 +274,12 @@ def learn(
         optimizer: torch.optim.Optimizer,
         grad_scaler: amp.grad_scaler,
         lr_scheduler: torch.optim.lr_scheduler,
+        total_games_played: int,
         baseline_only: bool = False,
         lock=threading.Lock(),
-):
+) -> Tuple[Dict, int]:
     """Performs a learning (optimization) step."""
-    with acquire_timeout(lock, LOCK_TIMEOUT):
+    with lock:
         with amp.autocast(enabled=flags.use_mixed_precision):
             flattened_batch = buffers_apply(batch, lambda x: torch.flatten(x, start_dim=0, end_dim=1))
             learner_outputs = learner_model(flattened_batch)
@@ -463,6 +453,7 @@ def learn(
                         key: val / n_actions for key, val in action_distributions_aggregated[space].items()
                     }
 
+            total_games_played += batch["done"].sum().item()
             stats = {
                 "Env": {
                     key[8:]: val[batch["done"]][~val[batch["done"]].isnan()].mean().item()
@@ -488,6 +479,7 @@ def learn(
                 },
                 "Misc": {
                     "learning_rate": last_lr,
+                    "total_games_played": total_games_played
                 },
             }
 
@@ -511,7 +503,7 @@ def learn(
 
         # noinspection PyTypeChecker
         actor_model.load_state_dict(learner_model.state_dict())
-        return stats
+        return stats, total_games_played
 
 
 def train(flags):
@@ -610,7 +602,7 @@ def train(flags):
     if checkpoint_state is not None and not flags.weights_only:
         scheduler.load_state_dict(checkpoint_state["scheduler_state_dict"])
 
-    step, stats = 0, {}
+    step, total_games_played, stats = 0, 0, {}
     if checkpoint_state is not None and not flags.weights_only:
         if "step" in checkpoint_state.keys():
             step = checkpoint_state["step"]
@@ -620,7 +612,7 @@ def train(flags):
 
     def batch_and_learn(learner_idx, lock=threading.Lock()):
         """Thread target for the learning process."""
-        nonlocal step, stats
+        nonlocal step, total_games_played, stats
         timings = prof.Timings()
         while step < flags.total_steps:
             timings.reset()
@@ -636,7 +628,7 @@ def train(flags):
             else:
                 batches = [full_batch]
             for batch in batches:
-                stats = learn(
+                stats, total_games_played = learn(
                     flags=flags,
                     actor_model=actor_model,
                     learner_model=learner_model,
@@ -645,15 +637,16 @@ def train(flags):
                     optimizer=optimizer,
                     grad_scaler=grad_scaler,
                     lr_scheduler=scheduler,
+                    total_games_played=total_games_played,
                     baseline_only=step / (t * b) < flags.n_value_warmup_batches,
                 )
-                with acquire_timeout(lock, LOCK_TIMEOUT):
+                with lock:
                     step += t * b
                     if not flags.disable_wandb:
                         wandb.log(stats, step=step)
             timings.time("learn")
-        if learner_idx == 0:
-            logging.info("Batch and learn: %s", timings.summary())
+            if learner_idx == 0:
+                logging.info(f"Batch and learn timing statistics: {timings.summary()}")
 
     for m in range(flags.num_buffers):
         free_queue.put(m)
