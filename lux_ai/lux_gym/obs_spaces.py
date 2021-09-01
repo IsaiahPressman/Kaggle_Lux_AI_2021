@@ -13,6 +13,7 @@ from ..lux.game_constants import GAME_CONSTANTS
 WOOD = Constants.RESOURCE_TYPES.WOOD
 COAL = Constants.RESOURCE_TYPES.COAL
 URANIUM = Constants.RESOURCE_TYPES.URANIUM
+DN_CYCLE_LEN = GAME_CONSTANTS["PARAMETERS"]["DAY_LENGTH"] + GAME_CONSTANTS["PARAMETERS"]["NIGHT_LENGTH"]
 MAX_RESOURCE = {
     WOOD: GAME_CONSTANTS["PARAMETERS"]["MAX_WOOD_AMOUNT"],
     # https://github.com/Lux-AI-Challenge/Lux-Design-2021/blob/master/src/Game/gen.ts#L253
@@ -135,6 +136,10 @@ class FixedShapeContinuousObs(FixedShapeObs):
             "night": gym.spaces.MultiBinary((1, 1)),
             # The turn number % 40
             "day_night_cycle": gym.spaces.Box(0., 1., shape=(1, 1)),
+            # The turn number // 40
+            "phase": gym.spaces.MultiDiscrete(
+                np.zeros((1, 1)) + GAME_CONSTANTS["PARAMETERS"]["MAX_DAYS"] / DN_CYCLE_LEN
+            ),
             # The turn number, normalized from 0-360
             "turn": gym.spaces.Box(0., 1., shape=(1, 1)),
             **subtask_encoding.spaces
@@ -237,9 +242,12 @@ class _FixedShapeContinuousObsWrapper(gym.Wrapper):
             obs["research_points"][0, p_id] = min(player.research_points / max_research, 1.)
             obs["researched_coal"][0, p_id] = player.researched_coal()
             obs["researched_uranium"][0, p_id] = player.researched_uranium()
-        dn_cycle_len = GAME_CONSTANTS["PARAMETERS"]["DAY_LENGTH"] + GAME_CONSTANTS["PARAMETERS"]["NIGHT_LENGTH"]
-        obs["night"][0, 0] = observation.turn % dn_cycle_len >= GAME_CONSTANTS["PARAMETERS"]["DAY_LENGTH"]
-        obs["day_night_cycle"][0, 0] = (observation.turn % dn_cycle_len) / dn_cycle_len
+        obs["night"][0, 0] = observation.turn % DN_CYCLE_LEN >= GAME_CONSTANTS["PARAMETERS"]["DAY_LENGTH"]
+        obs["day_night_cycle"][0, 0] = (observation.turn % DN_CYCLE_LEN) / DN_CYCLE_LEN
+        obs["phase"][0, 0] = min(
+            observation.turn // DN_CYCLE_LEN,
+            GAME_CONSTANTS["PARAMETERS"]["MAX_DAYS"] / DN_CYCLE_LEN - 1
+        )
         obs["turn"][0, 0] = observation.turn / GAME_CONSTANTS["PARAMETERS"]["MAX_DAYS"]
 
         if self.include_subtask_encoding:
@@ -257,6 +265,7 @@ class FixedShapeEmbeddingObs(FixedShapeObs):
             self,
             board_dims: Tuple[int, int] = MAX_BOARD_SIZE
     ) -> gym.spaces.Dict:
+        raise NotImplementedError("This class needs upkeep after the patch")
         subtask_encoding = super(FixedShapeEmbeddingObs, self).get_obs_spec(board_dims)
         x = board_dims[0]
         y = board_dims[1]
@@ -320,11 +329,7 @@ class FixedShapeEmbeddingObs(FixedShapeObs):
             # True when it is night
             "night": gym.spaces.MultiBinary((1, 1)),
             # The turn number % 40
-            "day_night_cycle": gym.spaces.MultiDiscrete(
-                np.zeros((1, 1)) +
-                GAME_CONSTANTS["PARAMETERS"]["DAY_LENGTH"] +
-                GAME_CONSTANTS["PARAMETERS"]["NIGHT_LENGTH"]
-            ),
+            "day_night_cycle": gym.spaces.MultiDiscrete(np.zeros((1, 1)) + DN_CYCLE_LEN),
             # The number of turns
             # "turn": gym.spaces.MultiDiscrete(np.zeros((1, 1)) + GAME_CONSTANTS["PARAMETERS"]["MAX_DAYS"]),
             "turn": gym.spaces.Box(0., 1., shape=(1, 1)),
@@ -343,6 +348,7 @@ class _FixedShapeEmbeddingObsWrapper(gym.Wrapper):
             subtask_reward_space: Optional[reward_spaces.Subtask]
     ):
         super(_FixedShapeEmbeddingObsWrapper, self).__init__(env)
+        raise NotImplementedError("This class needs upkeep after the patch")
         if include_subtask_encoding:
             if subtask_reward_space is None:
                 raise ValueError("Cannot use subtask_encoding without providing subtask_reward_space.")
@@ -486,9 +492,8 @@ class _FixedShapeEmbeddingObsWrapper(gym.Wrapper):
             obs["research_points"][0, p_id] = min(player.research_points / max_research, 1.)
             obs["researched_coal"][0, p_id] = player.researched_coal()
             obs["researched_uranium"][0, p_id] = player.researched_uranium()
-        dn_cycle_len = GAME_CONSTANTS["PARAMETERS"]["DAY_LENGTH"] + GAME_CONSTANTS["PARAMETERS"]["NIGHT_LENGTH"]
-        obs["night"][0, 0] = observation.turn % dn_cycle_len >= GAME_CONSTANTS["PARAMETERS"]["DAY_LENGTH"]
-        obs["day_night_cycle"][0, 0] = observation.turn % dn_cycle_len
+        obs["night"][0, 0] = observation.turn % DN_CYCLE_LEN >= GAME_CONSTANTS["PARAMETERS"]["DAY_LENGTH"]
+        obs["day_night_cycle"][0, 0] = observation.turn % DN_CYCLE_LEN
         """
         obs["turn"][0, 0] = observation.turn
         """
@@ -745,9 +750,8 @@ class _SequenceEmbeddingObsWrapper(gym.Wrapper):
                 obs["researched_uranium"][0, 1] = player.researched_uranium()
                 obs["researched_uranium"][1, 0] = player.researched_uranium()
 
-        dn_cycle_len = GAME_CONSTANTS["PARAMETERS"]["DAY_LENGTH"] + GAME_CONSTANTS["PARAMETERS"]["NIGHT_LENGTH"]
-        obs["night"][:, 0] = observation.turn % dn_cycle_len >= GAME_CONSTANTS["PARAMETERS"]["DAY_LENGTH"]
-        obs["day_night_cycle"][:, 0] = (observation.turn % dn_cycle_len) / dn_cycle_len
+        obs["night"][:, 0] = observation.turn % DN_CYCLE_LEN >= GAME_CONSTANTS["PARAMETERS"]["DAY_LENGTH"]
+        obs["day_night_cycle"][:, 0] = (observation.turn % DN_CYCLE_LEN) / DN_CYCLE_LEN
         obs["turn"][:, 0] = observation.turn / GAME_CONSTANTS["PARAMETERS"]["MAX_DAYS"]
 
         if self.include_subtask_encoding:

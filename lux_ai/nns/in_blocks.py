@@ -58,17 +58,19 @@ class ConvEmbeddingInputLayer(nn.Module):
                 # assert embedding_dim % np.prod(val.shape[:2]) == 0, f"{key}: {embedding_dim}, {val.shape[:2]}"
                 if isinstance(val, gym.spaces.MultiBinary):
                     n_embeddings = 2
+                    padding_idx = 0
                 elif isinstance(val, gym.spaces.MultiDiscrete):
                     if val.nvec.min() != val.nvec.max():
                         raise ValueError(
                             f"MultiDiscrete observation spaces must all have the same number of embeddings. "
                             f"Found: {np.unique(val.nvec)}")
                     n_embeddings = val.nvec.ravel()[0]
+                    padding_idx = None
                 else:
                     raise NotImplementedError(f"Got gym space: {type(val)}")
                 n_players = val.shape[1]
                 n_embeddings = n_players * (n_embeddings - 1) + 1
-                embeddings[key] = nn.Embedding(n_embeddings, embedding_dim, padding_idx=0)
+                embeddings[key] = nn.Embedding(n_embeddings, embedding_dim, padding_idx=padding_idx)
                 n_embedding_channels += embedding_dim
                 self.keys_to_op[key] = "embedding"
             elif isinstance(val, gym.spaces.Box):
