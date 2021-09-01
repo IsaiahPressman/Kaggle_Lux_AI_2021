@@ -13,7 +13,7 @@ project: Lux_AI_2021
 # The wandb user to log to
 entity: isaiahpressman
 # The wandb group for the run
-group: RPSA
+group: after_september_patch
 
 ## ENV params
 act_space: BasicActionSpace
