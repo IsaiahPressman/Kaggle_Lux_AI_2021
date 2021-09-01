@@ -124,7 +124,10 @@ class LoggingEnv(gym.Wrapper):
         self.vals_peak = {
             key: np.maximum(val, logs[key]) for key, val in self.vals_peak.items()
         }
-        logs.update({f"{key}_peak": val.copy() for key, val in self.vals_peak.items()})
+        for key, val in self.vals_peak.items():
+            logs[f"{key}_peak"] = val.copy()
+            logs[f"{key}_final"] = logs[key]
+            del logs[key]
 
         self.reward_sums = [r + s for r, s in zip(rewards, self.reward_sums)]
         logs["mean_cumulative_rewards"] = [np.mean(self.reward_sums)]
