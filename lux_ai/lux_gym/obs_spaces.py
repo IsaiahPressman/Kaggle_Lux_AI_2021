@@ -111,7 +111,7 @@ class FixedShapeContinuousObs(FixedShapeObs):
             "city_tile": gym.spaces.MultiBinary((1, P, x, y)),
             # Normalized from 0-MAX_FUEL
             "city_tile_fuel": gym.spaces.Box(0., 1., shape=(1, P, x, y)),
-            # Normalized from 0-30
+            # Normalized from 0-CITY_LIGHT_UPKEEP
             "city_tile_cost": gym.spaces.Box(0., 1., shape=(1, P, x, y)),
             # Normalized from 0-9
             "city_tile_cooldown": gym.spaces.Box(0., 1., shape=(1, P, x, y)),
