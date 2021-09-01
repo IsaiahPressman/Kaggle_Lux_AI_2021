@@ -42,8 +42,13 @@ class RLAgent:
             self.model_flags = flags_to_namespace(yaml.safe_load(f))
         with open(RL_AGENT_CONFIG_PATH, 'r') as f:
             self.agent_flags = SimpleNamespace(**yaml.safe_load(f))
-        self.device = torch.device(self.agent_flags.device) if torch.cuda.is_available() else torch.device("cpu")
-        # self.device = torch.device('cpu')
+        if torch.cuda.is_available():
+            if self.agent_flags.device == "player_id":
+                self.device = torch.device(f"cuda:{min(obs.player, torch.cuda.device_count())}")
+            else:
+                self.device = torch.device(self.agent_flags.device)
+        else:
+            self.device = torch.device("cpu")
         env = LuxEnv(
             act_space=self.model_flags.act_space(),
             obs_space=self.model_flags.obs_space(),
