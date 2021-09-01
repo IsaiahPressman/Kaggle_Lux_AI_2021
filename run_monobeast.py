@@ -53,6 +53,7 @@ def get_default_flags(flags: DictConfig) -> DictConfig:
     # Miscellaneous params
     flags.setdefault("disable_wandb", False)
     flags.setdefault("debug", False)
+    flags.setdefault("show_timings", True)
 
     return OmegaConf.create(flags)
 
