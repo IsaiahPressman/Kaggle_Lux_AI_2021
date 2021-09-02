@@ -53,12 +53,11 @@ def get_default_flags(flags: DictConfig) -> DictConfig:
     # Miscellaneous params
     flags.setdefault("disable_wandb", False)
     flags.setdefault("debug", False)
-    flags.setdefault("show_timings", True)
 
     return OmegaConf.create(flags)
 
 
-@hydra.main(config_path="conf", config_name="conv_config")
+@hydra.main(config_path="conf", config_name="conv_phase4_small_teacher")
 def main(flags: DictConfig):
     cli_conf = OmegaConf.from_cli()
     if Path("config.yaml").exists():
@@ -80,10 +79,11 @@ def main(flags: DictConfig):
     OmegaConf.save(flags, "config.yaml")
     if not flags.disable_wandb:
         wandb.init(
-            project=flags.project,
             config=vars(flags),
-            group=flags.group,
+            project=flags.project,
             entity=flags.entity,
+            group=flags.group,
+            name=flags.name,
         )
 
     flags = flags_to_namespace(OmegaConf.to_container(flags))

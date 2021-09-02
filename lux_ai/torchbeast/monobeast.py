@@ -436,7 +436,7 @@ def learn(
                     action_distributions_aggregated[space] = dist
                 elif space in ("cart", "worker"):
                     aggregated = {
-                        a: n for a, n in dist.items() if "TRANSFER" not in a
+                        a: n for a, n in dist.items() if "TRANSFER" not in a and "MOVE" not in a
                     }
                     aggregated["TRANSFER"] = sum({a: n for a, n in dist.items() if "TRANSFER" in a}.values())
                     aggregated["MOVE"] = sum({a: n for a, n in dist.items() if "MOVE" in a}.values())
@@ -650,8 +650,8 @@ def train(flags):
                     if not flags.disable_wandb:
                         wandb.log(stats, step=step)
             timings.time("learn")
-            if learner_idx == 0 and flags.show_timings:
-                logging.info(f"Batch and learn timing statistics: {timings.summary()}")
+        if learner_idx == 0:
+            logging.info(f"Batch and learn timing statistics: {timings.summary()}")
 
     for m in range(flags.num_buffers):
         free_queue.put(m)
