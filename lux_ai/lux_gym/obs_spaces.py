@@ -330,6 +330,10 @@ class FixedShapeEmbeddingObs(FixedShapeObs):
             "night": gym.spaces.MultiBinary((1, 1)),
             # The turn number % 40
             "day_night_cycle": gym.spaces.MultiDiscrete(np.zeros((1, 1)) + DN_CYCLE_LEN),
+            # The turn number // 40
+            "phase": gym.spaces.MultiDiscrete(
+                np.zeros((1, 1)) + GAME_CONSTANTS["PARAMETERS"]["MAX_DAYS"] / DN_CYCLE_LEN
+            ),
             # The number of turns
             # "turn": gym.spaces.MultiDiscrete(np.zeros((1, 1)) + GAME_CONSTANTS["PARAMETERS"]["MAX_DAYS"]),
             "turn": gym.spaces.Box(0., 1., shape=(1, 1)),
@@ -494,6 +498,10 @@ class _FixedShapeEmbeddingObsWrapper(gym.Wrapper):
             obs["researched_uranium"][0, p_id] = player.researched_uranium()
         obs["night"][0, 0] = observation.turn % DN_CYCLE_LEN >= GAME_CONSTANTS["PARAMETERS"]["DAY_LENGTH"]
         obs["day_night_cycle"][0, 0] = observation.turn % DN_CYCLE_LEN
+        obs["phase"][0, 0] = min(
+            observation.turn // DN_CYCLE_LEN,
+            GAME_CONSTANTS["PARAMETERS"]["MAX_DAYS"] / DN_CYCLE_LEN - 1
+        )
         """
         obs["turn"][0, 0] = observation.turn
         """
@@ -579,10 +587,10 @@ class SequenceContinuousObs(SequenceObs):
             # True when it is night
             "night": gym.spaces.MultiBinary((P, 1)),
             # The turn number % 40
-            "day_night_cycle": gym.spaces.MultiDiscrete(
-                np.zeros((P, 1)) +
-                GAME_CONSTANTS["PARAMETERS"]["DAY_LENGTH"] +
-                GAME_CONSTANTS["PARAMETERS"]["NIGHT_LENGTH"]
+            "day_night_cycle": gym.spaces.MultiDiscrete(np.zeros((P, 1)) + DN_CYCLE_LEN),
+            # The turn number // 40
+            "phase": gym.spaces.MultiDiscrete(
+                np.zeros((1, 1)) + GAME_CONSTANTS["PARAMETERS"]["MAX_DAYS"] / DN_CYCLE_LEN
             ),
             # The number of turns
             "turn": gym.spaces.Box(0., 1., shape=(P, 1)),
@@ -752,6 +760,10 @@ class _SequenceEmbeddingObsWrapper(gym.Wrapper):
 
         obs["night"][:, 0] = observation.turn % DN_CYCLE_LEN >= GAME_CONSTANTS["PARAMETERS"]["DAY_LENGTH"]
         obs["day_night_cycle"][:, 0] = (observation.turn % DN_CYCLE_LEN) / DN_CYCLE_LEN
+        obs["phase"][0, 0] = min(
+            observation.turn // DN_CYCLE_LEN,
+            GAME_CONSTANTS["PARAMETERS"]["MAX_DAYS"] / DN_CYCLE_LEN - 1
+        )
         obs["turn"][:, 0] = observation.turn / GAME_CONSTANTS["PARAMETERS"]["MAX_DAYS"]
 
         if self.include_subtask_encoding:
