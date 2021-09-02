@@ -1,0 +1,84 @@
+defaults:
+- override hydra/job_logging: colorlog
+- override hydra/hydra_logging: colorlog
+
+hydra:
+  run:
+    dir: ./outputs/${now:%m-%d}/${now:%H-%M-%S}
+
+name: conv_phase3_small_teacher
+## WANDB params
+# The wandb project name
+project: Lux_AI_2021
+# The wandb user to log to
+entity: isaiahpressman
+# The wandb group for the run
+group: after_september_patch
+
+## ENV params
+act_space: BasicActionSpace
+obs_space: FixedShapeContinuousObs
+obs_space_kwargs:
+  include_subtask_encoding: False
+reward_space: GameResultReward
+reward_space_kwargs: {}
+  #early_stop: True
+  #city: 2.
+  #unit: 1.
+  #fuel: 0.
+  #step: 0.005
+
+## TRAINING params
+total_steps: 2e7
+num_actors: 2
+n_actor_envs: 16
+unroll_length: 16
+batch_size: 4
+discounting: 0.999
+
+## MODEL params
+model_arch: conv_model
+n_blocks: 16
+hidden_dim: 128
+n_merge_layers: 1
+normalize: False
+use_index_select: True
+# Conv-specific params
+kernel_size: 5
+
+
+## OPTIMIZER params
+optimizer_class: Adam
+optimizer_kwargs:
+  lr: 5e-5
+  # See https://arxiv.org/pdf/2105.05246.pdf
+  eps: 0.0003
+  #alpha: 0.9
+min_lr_mod: 0.01
+
+## LOSS params
+entropy_cost: 0.0002
+baseline_cost: 1.
+teacher_kl_cost: 0.01
+# lambda parameter for TD-lambda and UPGO losses
+lmb: 0.8
+reduction: sum
+
+# Pretrained model for KL loss
+use_teacher: True
+teacher_load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/09-01/17-03-16/
+teacher_checkpoint_file: 05756672.pt
+
+# MISCELLANEOUS params
+actor_device: cuda:1
+learner_device: cuda:0
+disable_wandb: False
+model_log_freq: 100
+# file_descriptor or file_system
+sharing_strategy: file_descriptor
+
+# Continue from previous run
+#load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/09-01/09-58-50/
+#checkpoint_file: 05079552.pt
+#weights_only: True
+#n_value_warmup_batches: 2000
