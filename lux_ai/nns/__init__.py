@@ -1,12 +1,13 @@
 import torch
 from torch import nn
 
-from ..lux_gym.obs_spaces import MAX_BOARD_SIZE, SUBTASK_ENCODING
-from ..lux_gym.multi_subtask import MultiSubtask
 from .models import BasicActorCriticNetwork
 from .in_blocks import ConvEmbeddingInputLayer
 from .attn_blocks import ViTBlock, RPSA, GPSA
 from .conv_blocks import FullConvResidualBlock
+from ..lux_gym.obs_spaces import SUBTASK_ENCODING
+from ..lux_gym.multi_subtask import MultiSubtask
+from ..utility_constants import MAX_BOARD_SIZE
 
 
 def create_model(flags, device: torch.device) -> nn.Module:

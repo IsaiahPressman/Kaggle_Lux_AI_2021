@@ -15,9 +15,10 @@ from typing import Any, Dict, List, NoReturn, Optional, Tuple
 
 from ..lux.game import Game
 from ..lux.game_objects import Unit, CityTile
-from ..lux_gym.act_spaces import BaseActSpace, ACTION_MEANINGS, MAX_OVERLAPPING_ACTIONS
-from ..lux_gym.obs_spaces import BaseObsSpace, MAX_BOARD_SIZE
+from ..lux_gym.act_spaces import BaseActSpace, ACTION_MEANINGS
+from ..lux_gym.obs_spaces import BaseObsSpace
 from ..lux_gym.reward_spaces import GameResultReward
+from ..utility_constants import MAX_BOARD_SIZE
 
 # In case dir_path is removed in production environment
 try:
@@ -95,8 +96,8 @@ class LuxEnv(gym.Env):
             self.seed()
         self.done = False
         self.info = {}
-        self.pos_to_unit_dict = {}
-        self.pos_to_city_tile_dict = {}
+        self.pos_to_unit_dict = dict()
+        self.pos_to_city_tile_dict = dict()
         self.reset_count = 0
 
         self._dimension_process = None
