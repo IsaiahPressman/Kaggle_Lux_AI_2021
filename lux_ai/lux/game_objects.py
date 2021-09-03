@@ -21,6 +21,10 @@ class Player:
     def researched_uranium(self) -> bool:
         return self.research_points >= GAME_CONSTANTS["PARAMETERS"]["RESEARCH_REQUIREMENTS"]["URANIUM"]
 
+    @property
+    def city_tiles(self) -> List['CityTile']:
+        return [ct for city in self.cities.values() for ct in city.citytiles]
+
 
 class City:
     def __init__(self, teamid, cityid, fuel, light_upkeep):

@@ -3,9 +3,10 @@ import itertools
 import numpy as np
 from typing import *
 
-from . import map_processing, duties, utils
+from . import map_processing, duties
 from .actions import Action
-from .utility_constants import LOCAL_EVAL, DAY_LEN, NIGHT_LEN, DN_CYCLE_LEN, MAX_RESEARCH
+from .. import utils
+from ..utility_constants import LOCAL_EVAL, DAY_LEN, NIGHT_LEN, DN_CYCLE_LEN, MAX_RESEARCH
 from ..lux.constants import Constants
 from ..lux.game import Game
 from ..lux.game_objects import CityTile, Unit
@@ -82,7 +83,7 @@ class Agent:
         self.all_immobile_units_mat[:] = False
         for player in self.game_state.players:
             p_id = player.team
-            for city_tile in utils.get_city_tiles(player):
+            for city_tile in player.city_tiles:
                 self.all_cities_mat[p_id, city_tile.pos.x, city_tile.pos.y] = True
 
             for unit in player.units:
@@ -176,7 +177,7 @@ class Agent:
         units_to_build = max(self.me.city_tile_count - len(self.me.units), 0)
         research_remaining = max(MAX_RESEARCH - self.me.research_points, 0)
 
-        for city_tile in utils.get_city_tiles(self.me):
+        for city_tile in self.me.city_tiles:
             if not city_tile.can_act():
                 continue
 

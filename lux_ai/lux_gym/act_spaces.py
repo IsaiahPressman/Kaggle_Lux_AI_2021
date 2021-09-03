@@ -5,28 +5,16 @@ import numpy as np
 from typing import Callable, Dict, List, Optional, Tuple, Union
 
 
-from .obs_spaces import MAX_BOARD_SIZE
+from ..utility_constants import MAX_CAPACITY, MAX_RESEARCH, MAX_BOARD_SIZE
 from ..lux.constants import Constants
 from ..lux.game import Game
-from ..lux.game_constants import GAME_CONSTANTS
 from ..lux.game_objects import CityTile, Unit
 
 # The maximum number of actions that can be taken by units sharing a square
 # All remaining units take the no-op action
 MAX_OVERLAPPING_ACTIONS = 4
-DIRECTIONS = (
-    Constants.DIRECTIONS.NORTH,
-    Constants.DIRECTIONS.EAST,
-    Constants.DIRECTIONS.SOUTH,
-    Constants.DIRECTIONS.WEST
-)
-RESOURCES = (
-    Constants.RESOURCE_TYPES.WOOD,
-    Constants.RESOURCE_TYPES.COAL,
-    Constants.RESOURCE_TYPES.URANIUM
-)
-_MAX_CAPACITY = max(GAME_CONSTANTS["PARAMETERS"]["RESOURCE_CAPACITY"].values())
-_MAX_RESEARCH = max(GAME_CONSTANTS["PARAMETERS"]["RESEARCH_REQUIREMENTS"].values())
+DIRECTIONS = Constants.DIRECTIONS.astuple(include_center=False)
+RESOURCES = Constants.RESOURCE_TYPES.astuple()
 
 ACTION_MEANINGS = {
     "worker": [
@@ -109,7 +97,7 @@ def _transfer_factory(action_meaning: str) -> Callable[..., str]:
         # action could be bucketed if partial transfers become important.
         # The game engine automatically determines the actual maximum legal transfer
         # https://github.com/Lux-AI-Challenge/Lux-Design-2021/blob/master/src/Game/index.ts#L704
-        return unit.transfer(dest_id=dest_unit.id, resourceType=resource, amount=_MAX_CAPACITY)
+        return unit.transfer(dest_id=dest_unit.id, resourceType=resource, amount=MAX_CAPACITY)
 
     return _transfer_func
 
@@ -377,7 +365,7 @@ class BasicActionSpace(BaseActSpace):
                         # Research is a legal action whenever research_points < max_research
                         # Building a new unit is only a legal action when n_units < n_city_tiles
                         x, y = city_tile.pos.x, city_tile.pos.y
-                        if player.research_points >= _MAX_RESEARCH:
+                        if player.research_points >= MAX_RESEARCH:
                             available_actions_mask["city_tile"][
                                 :,
                                 p_id,

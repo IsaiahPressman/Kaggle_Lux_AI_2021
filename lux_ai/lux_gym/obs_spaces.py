@@ -6,6 +6,7 @@ import numpy as np
 from typing import Dict, List, Optional, Tuple
 
 from . import reward_spaces
+from ..utility_constants import DN_CYCLE_LEN, MAX_RESOURCE, MAX_BOARD_SIZE
 from ..lux.constants import Constants
 from ..lux.game import Game
 from ..lux.game_constants import GAME_CONSTANTS
@@ -13,17 +14,8 @@ from ..lux.game_constants import GAME_CONSTANTS
 WOOD = Constants.RESOURCE_TYPES.WOOD
 COAL = Constants.RESOURCE_TYPES.COAL
 URANIUM = Constants.RESOURCE_TYPES.URANIUM
-DN_CYCLE_LEN = GAME_CONSTANTS["PARAMETERS"]["DAY_LENGTH"] + GAME_CONSTANTS["PARAMETERS"]["NIGHT_LENGTH"]
-MAX_RESOURCE = {
-    WOOD: GAME_CONSTANTS["PARAMETERS"]["MAX_WOOD_AMOUNT"],
-    # https://github.com/Lux-AI-Challenge/Lux-Design-2021/blob/master/src/Game/gen.ts#L253
-    COAL: 425.,
-    # https://github.com/Lux-AI-Challenge/Lux-Design-2021/blob/master/src/Game/gen.ts#L269
-    URANIUM: 350.
-}
 # TODO: Fix max fuel amount
 MAX_FUEL = 30 * 10 * 9
-MAX_BOARD_SIZE = (32, 32)
 ALL_SUBTASKS = []
 for rspace in reward_spaces.__dict__.values():
     if isinstance(rspace, type) and issubclass(rspace, reward_spaces.Subtask) and rspace is not reward_spaces.Subtask:

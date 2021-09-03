@@ -1,10 +1,10 @@
 from abc import ABC, abstractmethod
 import numpy as np
-from typing import List, Optional, NoReturn, Set
+from typing import Dict, List, Optional, NoReturn, Set
 
 from .actions import Action
-from .utils import in_bounds, DEBUG_MESSAGE, RUNTIME_ASSERT
-from .utility_constants import COLLECTION_RATES
+from ..utils import in_bounds, DEBUG_MESSAGE, RUNTIME_ASSERT
+from ..utility_constants import COLLECTION_RATES
 from ..lux import annotate
 from ..lux.constants import Constants
 from ..lux.game_objects import City, Unit
@@ -20,7 +20,7 @@ class Duty(ABC):
         self.priority = priority
 
     @abstractmethod
-    def get_action_preferences(self, **kwargs) -> dict[Unit, List[Action]]:
+    def get_action_preferences(self, **kwargs) -> Dict[Unit, List[Action]]:
         pass
 
     def validate(self) -> NoReturn:
@@ -48,7 +48,7 @@ class MineFuelLocal(Duty):
             available_mat: np.ndarray,
             smoothed_rps_mats: List[np.ndarray],
             smoothed_fps_mats: List[np.ndarray],
-    ) -> dict[Unit, List[Action]]:
+    ) -> Dict[Unit, List[Action]]:
         action_preferences = {}
         for unit in self.units:
             if not unit.can_act():

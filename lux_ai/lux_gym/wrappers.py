@@ -6,8 +6,9 @@ from typing import Dict, List, NoReturn, Optional, Tuple, Union
 
 from .act_spaces import ACTION_MEANINGS
 from .lux_env import LuxEnv
-from .obs_spaces import MAX_BOARD_SIZE, SUBTASK_ENCODING
+from .obs_spaces import SUBTASK_ENCODING
 from .reward_spaces import BaseRewardSpace, Subtask
+from ..utility_constants import MAX_BOARD_SIZE
 
 
 class PadFixedShapeEnv(gym.Wrapper):

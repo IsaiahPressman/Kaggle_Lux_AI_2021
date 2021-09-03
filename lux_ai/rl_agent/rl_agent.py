@@ -8,21 +8,15 @@ from typing import *
 import yaml
 
 from ..lux_gym import create_reward_space, LuxEnv, wrappers
-from ..lux_gym.act_spaces import MAX_BOARD_SIZE, ACTION_MEANINGS
-from ..handcrafted_agents.utils import get_city_tiles, DEBUG_MESSAGE, RUNTIME_DEBUG_MESSAGE
-from ..handcrafted_agents.utility_constants import MAX_RESEARCH
+from ..lux_gym.act_spaces import ACTION_MEANINGS
+from ..utils import DEBUG_MESSAGE, RUNTIME_DEBUG_MESSAGE
+from ..utility_constants import MAX_RESEARCH, DN_CYCLE_LEN, MAX_BOARD_SIZE
 from ..nns import create_model
 from ..utils import flags_to_namespace
 
 from ..lux.game import Game
-from ..lux.constants import Constants
 from ..lux.game_objects import CityTile, Unit
-from ..lux.game_constants import GAME_CONSTANTS
 from ..lux import annotate
-
-DIRECTIONS = Constants.DIRECTIONS
-RESOURCE_TYPES = Constants.RESOURCE_TYPES
-DN_CYCLE_LEN = GAME_CONSTANTS["PARAMETERS"]["DAY_LENGTH"] + GAME_CONSTANTS["PARAMETERS"]["NIGHT_LENGTH"]
 
 MODEL_CONFIG_PATH = Path(__file__).parent / "config.yaml"
 RL_AGENT_CONFIG_PATH = Path(__file__).parent / "rl_agent_config.yaml"
@@ -135,7 +129,7 @@ class RLAgent:
                     DEBUG_MESSAGE(f"Unrecognized unit type: {unit}")
                     continue
                 dictionary.setdefault(pos_to_loc(unit.pos.astuple()), []).append(unit)
-        for city_tile in get_city_tiles(self.me):
+        for city_tile in self.me.city_tiles:
             self.my_city_tile_mat[city_tile.pos.x, city_tile.pos.y] = True
             if city_tile.can_act():
                 self.loc_to_actionable_city_tiles[pos_to_loc(city_tile.pos.astuple())] = city_tile
