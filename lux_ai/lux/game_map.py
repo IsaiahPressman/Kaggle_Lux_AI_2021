@@ -1,5 +1,4 @@
-import math
-from typing import List
+from typing import List, Optional
 
 from .constants import Constants
 
@@ -16,9 +15,10 @@ class Resource:
 class Cell:
     def __init__(self, x, y):
         self.pos = Position(x, y)
-        self.resource: Resource = None
+        self.resource: Optional[Resource] = None
         self.citytile = None
         self.road = 0
+
     def has_resource(self):
         return self.resource is not None and self.resource.amount > 0
 

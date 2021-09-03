@@ -1,6 +1,6 @@
 from .constants import Constants
 from .game_map import GameMap
-from .game_objects import Player, Unit, City, CityTile
+from .game_objects import Player, Unit, City
 
 INPUT_CONSTANTS = Constants.INPUT_CONSTANTS
 
@@ -13,13 +13,14 @@ class Game:
         self.id = int(messages[0])
         self.turn = -1
         # get some other necessary initial input
-        mapInfo = messages[1].split(" ")
-        self.map_width = int(mapInfo[0])
-        self.map_height = int(mapInfo[1])
+        map_info = messages[1].split(" ")
+        self.map_width = int(map_info[0])
+        self.map_height = int(map_info[1])
         self.map = GameMap(self.map_width, self.map_height)
         self.players = [Player(0), Player(1)]
 
-    def _end_turn(self):
+    @staticmethod
+    def _end_turn():
         print("D_FINISH")
 
     def _reset_player_states(self):
@@ -30,6 +31,7 @@ class Game:
         self.players[1].cities = {}
         self.players[1].city_tile_count = 0
 
+    # noinspection PyProtectedMember
     def _update(self, messages):
         """
         update state
@@ -78,7 +80,7 @@ class Game:
                 city = self.players[team].cities[cityid]
                 citytile = city._add_city_tile(x, y, cooldown)
                 self.map.get_cell(x, y).citytile = citytile
-                self.players[team].city_tile_count += 1;
+                self.players[team].city_tile_count += 1
             elif input_identifier == INPUT_CONSTANTS.ROADS:
                 x = int(strs[1])
                 y = int(strs[2])

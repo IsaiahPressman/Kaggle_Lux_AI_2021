@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, List
 
 from .constants import Constants
 from .game_map import Position
@@ -11,7 +11,7 @@ class Player:
     def __init__(self, team):
         self.team = team
         self.research_points = 0
-        self.units: list[Unit] = []
+        self.units: List[Unit] = []
         self.cities: Dict[str, City] = {}
         self.city_tile_count = 0
 
@@ -27,7 +27,7 @@ class City:
         self.cityid = cityid
         self.team = teamid
         self.fuel = fuel
-        self.citytiles: list[CityTile] = []
+        self.citytiles: List[CityTile] = []
         self.light_upkeep = light_upkeep
 
     def _add_city_tile(self, x, y, cooldown):
