@@ -44,6 +44,13 @@ def get_default_flags(flags: DictConfig) -> DictConfig:
     flags.setdefault("num_learner_threads", 1)
     flags.setdefault("use_teacher", False)
 
+    # Model params
+    if flags.get("use_index_select"):
+        logging.warning(
+            "index_select breaks padding_index functionality and is only still included for backwards compatibility"
+        )
+    flags.setdefault("use_index_select", False)
+
     # Reloading previous run params
     flags.setdefault("load_dir", None)
     flags.setdefault("checkpoint_file", None)
@@ -57,7 +64,7 @@ def get_default_flags(flags: DictConfig) -> DictConfig:
     return OmegaConf.create(flags)
 
 
-@hydra.main(config_path="conf", config_name="conv_phase4_small_teacher")
+@hydra.main(config_path="conf", config_name="conv_config")
 def main(flags: DictConfig):
     cli_conf = OmegaConf.from_cli()
     if Path("config.yaml").exists():
