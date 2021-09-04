@@ -42,7 +42,6 @@ n_blocks: 16
 hidden_dim: 128
 n_merge_layers: 1
 normalize: False
-use_index_select: True
 # Conv-specific params
 kernel_size: 5
 

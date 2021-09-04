@@ -43,7 +43,6 @@ n_blocks: 4
 hidden_dim: 128
 n_merge_layers: 2
 normalize: True
-use_index_select: True
 # Attention-specific params
 n_heads: 2
 
