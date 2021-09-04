@@ -20,3 +20,7 @@ lux_ai/rl_agent/*.pt
 # RL agent copy for comparing different model weights
 main_2.py
 lux_ai/rl_agent_2/
+
+# Retired hall of fame RL agents and extra .tar.gz files
+hall_of_fame/retired/
+hall_of_fame/*/*.tar.gz
