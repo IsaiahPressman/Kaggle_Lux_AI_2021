@@ -1,0 +1,13 @@
+defaults:
+- override hydra/job_logging: colorlog
+- override hydra/hydra_logging: colorlog
+
+hydra:
+  run:
+    dir: ./outputs/${now:%m-%d}/${now:%H-%M-%S}
+
+
+# Continue from previous run
+load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/09-02/10-54-58/
+checkpoint_file: 16404288.pt
+weights_only: False
