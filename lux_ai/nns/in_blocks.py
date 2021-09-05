@@ -17,7 +17,7 @@ def _forward_select(embedding_layer: nn.Embedding, x: torch.Tensor) -> torch.Ten
 def _get_select_func(use_index_select: bool) -> Callable:
     """
     Use index select instead of default forward to possibly speed up embedding.
-    NB: This is now deprecated because it breaks padding_idx functionality
+    NB: This disables padding_idx functionality
     """
     if use_index_select:
         return _index_select
@@ -42,7 +42,7 @@ class ConvEmbeddingInputLayer(nn.Module):
             obs_space: gym.spaces.Dict,
             embedding_dim: int,
             n_merge_layers: int = 1,
-            use_index_select: bool = False,
+            use_index_select: bool = True,
             activation: Callable = nn.LeakyReLU
     ):
         super(ConvEmbeddingInputLayer, self).__init__()
