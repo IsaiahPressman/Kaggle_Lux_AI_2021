@@ -88,7 +88,8 @@ def create_model(flags, device: torch.device) -> nn.Module:
         base_out_channels=flags.hidden_dim,
         action_space=act_space.get_action_space(),
         reward_space=flags.reward_space.get_reward_spec(),
-        n_value_heads=n_value_heads
+        n_value_heads=n_value_heads,
+        rescale_value_input=flags.rescale_value_input
     )
     return model.to(device=device)
 
