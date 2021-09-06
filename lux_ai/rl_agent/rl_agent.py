@@ -12,7 +12,7 @@ from ..lux_gym.act_spaces import ACTION_MEANINGS
 from ..utils import DEBUG_MESSAGE, RUNTIME_DEBUG_MESSAGE
 from ..utility_constants import MAX_RESEARCH, DN_CYCLE_LEN, MAX_BOARD_SIZE
 from ..nns import create_model
-from ..utils import flags_to_namespace
+from ..utils import flags_to_namespace, Stopwatch
 
 from ..lux.game import Game
 from ..lux.game_objects import CityTile, Unit
@@ -43,6 +43,8 @@ class RLAgent:
                 self.device = torch.device(self.agent_flags.device)
         else:
             self.device = torch.device("cpu")
+
+        # Build the env used to convert observations for the model
         env = LuxEnv(
             act_space=self.model_flags.act_space(),
             obs_space=self.model_flags.obs_space(),
@@ -56,7 +58,6 @@ class RLAgent:
         env = wrappers.VecEnv([env])
         env = wrappers.PytorchEnv(env, self.device)
         env = wrappers.DictEnv(env)
-
         self.env = env
         self.env.reset(observation_updates=obs["updates"], force=True)
         self.action_placeholder = {
@@ -64,11 +65,13 @@ class RLAgent:
             for key, space in self.unwrapped_env.action_space.get_action_space().spaces.items()
         }
 
+        # Load the model
         self.model = create_model(self.model_flags, self.device)
         checkpoint_states = torch.load(CHECKPOINT_PATH, map_location=self.device)
         self.model.load_state_dict(checkpoint_states["model_state_dict"])
         self.model.eval()
 
+        # Various utility properties
         self.me = self.game_state.players[obs.player]
         self.opp = self.game_state.players[(obs.player + 1) % 2]
         self.my_city_tile_mat = np.zeros(MAX_BOARD_SIZE, dtype=bool)
@@ -77,13 +80,22 @@ class RLAgent:
         self.loc_to_actionable_workers = {}
         self.loc_to_actionable_carts = {}
 
+        # Logging
+        self.stopwatch = Stopwatch()
+
     def __call__(self, obs, conf) -> List[str]:
+        self.stopwatch.reset()
+
+        self.stopwatch.start("Format observation")
         self.preprocess(obs, conf)
         env_output = self.get_env_output()
+
+        self.stopwatch.stop().start("Model inference")
         with torch.no_grad():
             agent_output = self.model.select_best_actions(env_output, actions_per_square=None)
             # agent_output = self.model.sample_actions(env_output, actions_per_square=None)
 
+        self.stopwatch.stop().start("Collision detection")
         if self.agent_flags.use_collision_detection:
             actions = self.resolve_collision_detection(obs, agent_output)
         else:
@@ -91,23 +103,13 @@ class RLAgent:
                 key: value.squeeze(0).cpu().numpy() for key, value in agent_output["actions"].items()
             })
             actions = actions[obs.player]
-
-        """
-        # you can add debug annotations using the functions in the annotate object
-        i = game_state.turn + observation.player
-        actions.append(annotate.circle(i % width, i % height))
-        i += 1
-        actions.append(annotate.x(i % width, i % height))
-        i += 1
-        actions.append(annotate.line(i % width, i % height, (i + 3) % width, (i + 3) % height))
-        actions.append(annotate.text(0, 1, f"{game_state.turn}_Text!"))
-        actions.append(annotate.sidetext(f"Research points: {player.research_points}"))
-        """
+        self.stopwatch.stop()
 
         value = agent_output["baseline"].squeeze().cpu().numpy()[obs.player]
         info_msg = f"Turn: {self.game_state.turn} - Predicted value: {value:.2f}"
+        info_msg += f" - {str(self.stopwatch)}"
         actions.append(annotate.sidetext(info_msg))
-        RUNTIME_DEBUG_MESSAGE(info_msg)
+        DEBUG_MESSAGE(info_msg)
         return actions
 
     def preprocess(self, obs, conf) -> NoReturn:
