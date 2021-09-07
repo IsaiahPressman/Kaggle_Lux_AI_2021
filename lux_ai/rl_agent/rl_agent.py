@@ -7,11 +7,12 @@ from types import SimpleNamespace
 from typing import *
 import yaml
 
+from . import data_augmentation
 from ..lux_gym import create_reward_space, LuxEnv, wrappers
 from ..lux_gym.act_spaces import ACTION_MEANINGS
 from ..utils import DEBUG_MESSAGE, RUNTIME_DEBUG_MESSAGE
 from ..utility_constants import MAX_RESEARCH, DN_CYCLE_LEN, MAX_BOARD_SIZE
-from ..nns import create_model
+from ..nns import create_model, models
 from ..utils import flags_to_namespace, Stopwatch
 
 from ..lux.game import Game
@@ -71,6 +72,14 @@ class RLAgent:
         self.model.load_state_dict(checkpoint_states["model_state_dict"])
         self.model.eval()
 
+        # Load the data augmenters
+        self.data_augmentations = []
+        for da in self.agent_flags.data_augmentations:
+            cls = data_augmentation.__dict__[da]
+            if not (isinstance(cls, type) and issubclass(cls, data_augmentation.DataAugmenter)):
+                raise ValueError(f"Unrecognized data augmentation: {da}")
+            self.data_augmentations.append(cls())
+
         # Various utility properties
         self.me = self.game_state.players[obs.player]
         self.opp = self.game_state.players[(obs.player + 1) % 2]
@@ -86,14 +95,30 @@ class RLAgent:
     def __call__(self, obs, conf) -> List[str]:
         self.stopwatch.reset()
 
-        self.stopwatch.start("Format observation")
+        self.stopwatch.start("Observation processing")
         self.preprocess(obs, conf)
         env_output = self.get_env_output()
+        relevant_env_output_augmented = {
+            "obs": self.augment_data(env_output["obs"], is_policy=False),
+            "info": {
+                "input_mask": self.augment_data(env_output["info"]["input_mask"].unsqueeze(1),
+                                                is_policy=False).squeeze(1),
+                "available_actions_mask": self.augment_data(env_output["info"]["available_actions_mask"],
+                                                            is_policy=True),
+            },
+        }
 
         self.stopwatch.stop().start("Model inference")
         with torch.no_grad():
-            agent_output = self.model.select_best_actions(env_output, actions_per_square=None)
-            # agent_output = self.model.sample_actions(env_output, actions_per_square=None)
+            agent_output_augmented = self.model.select_best_actions(relevant_env_output_augmented)
+            agent_output = {
+                "policy_logits": self.aggregate_augmented_predictions(agent_output_augmented["policy_logits"]),
+                "baseline": agent_output_augmented["baseline"].mean(dim=0, keepdim=True)
+            }
+            agent_output["actions"] = {
+                key: models.DictActor.logits_to_actions(val, sample=False, actions_per_square=None)
+                for key, val in agent_output["policy_logits"].items()
+            }
 
         self.stopwatch.stop().start("Collision detection")
         if self.agent_flags.use_collision_detection:
@@ -106,10 +131,10 @@ class RLAgent:
         self.stopwatch.stop()
 
         value = agent_output["baseline"].squeeze().cpu().numpy()[obs.player]
-        info_msg = f"Turn: {self.game_state.turn} - Predicted value: {value:.2f}"
-        info_msg += f" - {str(self.stopwatch)}"
-        actions.append(annotate.sidetext(info_msg))
-        DEBUG_MESSAGE(info_msg)
+        value_msg = f"Turn: {self.game_state.turn} - Predicted value: {value:.2f}"
+        timing_msg = f" - {str(self.stopwatch)}"
+        actions.append(annotate.sidetext(value_msg))
+        DEBUG_MESSAGE(value_msg + timing_msg)
         return actions
 
     def preprocess(self, obs, conf) -> NoReturn:
@@ -138,6 +163,39 @@ class RLAgent:
 
     def get_env_output(self) -> Dict:
         return self.env.step(self.action_placeholder)
+
+    def augment_data(
+            self,
+            data: Union[torch.Tensor, Dict[str, torch.Tensor]],
+            is_policy: bool
+    ) -> Union[torch.Tensor, Dict[str, torch.Tensor]]:
+        if len(self.data_augmentations) == 0:
+            return data
+
+        if isinstance(data, dict):
+            augmented_data = [data] + [augmentation.apply(data, inverse=False, is_policy=is_policy)
+                                       for augmentation in self.data_augmentations]
+            return {
+                key: torch.cat([d[key] for d in augmented_data], dim=0)
+                for key in data.keys()
+            }
+        else:
+            augmented_data = [data] + [augmentation.op(data, inverse=False, is_policy=is_policy)
+                                       for augmentation in self.data_augmentations]
+            return torch.cat(augmented_data, dim=0)
+
+    def aggregate_augmented_predictions(self, policy: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        if len(self.data_augmentations) == 0:
+            return policy
+
+        policy_reoriented = [{key: val[0].unsqueeze(0) for key, val in policy.items()}]
+        for i, augmentation in enumerate(self.data_augmentations):
+            augmented_policy = {key: val[i + 1].unsqueeze(0) for key, val in policy.items()}
+            policy_reoriented.append(augmentation.apply(augmented_policy, inverse=True, is_policy=True))
+        return {
+            key: torch.cat([d[key] for d in policy_reoriented], dim=0).mean(dim=0, keepdim=True)
+            for key in policy.keys()
+        }
 
     def resolve_collision_detection(self, obs, agent_output) -> List[str]:
         # Get log_probs for all of my actions

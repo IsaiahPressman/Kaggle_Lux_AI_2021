@@ -6,3 +6,10 @@ use_collision_detection: True
 # Bans no-ops after the first night until research is complete
 # Has no effect when use_collision_detection is False
 must_research: False
+
+data_augmentations:
+  - VerticalFlip
+  - HorizontalFlip
+  - Rot90
+  - Rot180
+  - Rot270
