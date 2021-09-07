@@ -51,7 +51,7 @@ kernel_size: 5
 ## OPTIMIZER params
 optimizer_class: Adam
 optimizer_kwargs:
-  lr: 1e-4
+  lr: 5e-5
   # See https://arxiv.org/pdf/2105.05246.pdf
   eps: 0.0003
   #alpha: 0.9
@@ -60,7 +60,7 @@ min_lr_mod: 0.01
 ## LOSS params
 entropy_cost: 0.0002
 baseline_cost: 1.
-teacher_kl_cost: 0.005
+teacher_kl_cost: 0.001
 # lambda parameter for TD-lambda and UPGO losses
 lmb: 0.5
 reduction: sum
@@ -79,7 +79,7 @@ model_log_freq: 100
 sharing_strategy: file_descriptor
 
 # Continue from previous run
-#load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/09-04/01-26-27/
-#checkpoint_file: 02456960.pt
-#weights_only: True
-#n_value_warmup_batches: 0
+load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/09-06/01-12-38/
+checkpoint_file: 08078656.pt
+weights_only: True
+n_value_warmup_batches: 0
