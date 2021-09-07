@@ -39,11 +39,12 @@ class RLAgent:
             self.agent_flags = SimpleNamespace(**yaml.safe_load(f))
         if torch.cuda.is_available():
             if self.agent_flags.device == "player_id":
-                self.device = torch.device(f"cuda:{min(obs.player, torch.cuda.device_count())}")
+                device_id = f"cuda:{min(obs.player, torch.cuda.device_count())}"
             else:
-                self.device = torch.device(self.agent_flags.device)
+                device_id = self.agent_flags.device
         else:
-            self.device = torch.device("cpu")
+            device_id = "cpu"
+        self.device = torch.device(device_id)
 
         # Build the env used to convert observations for the model
         env = LuxEnv(
@@ -57,7 +58,8 @@ class RLAgent:
         env = env.obs_space.wrap_env(env, reward_space)
         env = wrappers.PadFixedShapeEnv(env)
         env = wrappers.VecEnv([env])
-        env = wrappers.PytorchEnv(env, self.device)
+        # We'll move the data onto the target device necessary after preprocessing
+        env = wrappers.PytorchEnv(env, torch.device("cpu"))
         env = wrappers.DictEnv(env)
         self.env = env
         self.env.reset(observation_updates=obs["updates"], force=True)
@@ -113,7 +115,7 @@ class RLAgent:
             agent_output_augmented = self.model.select_best_actions(relevant_env_output_augmented)
             agent_output = {
                 "policy_logits": self.aggregate_augmented_predictions(agent_output_augmented["policy_logits"]),
-                "baseline": agent_output_augmented["baseline"].mean(dim=0, keepdim=True)
+                "baseline": agent_output_augmented["baseline"].mean(dim=0, keepdim=True).cpu()
             }
             agent_output["actions"] = {
                 key: models.DictActor.logits_to_actions(val, sample=False, actions_per_square=None)
@@ -125,12 +127,12 @@ class RLAgent:
             actions = self.resolve_collision_detection(obs, agent_output)
         else:
             actions, _ = self.unwrapped_env.process_actions({
-                key: value.squeeze(0).cpu().numpy() for key, value in agent_output["actions"].items()
+                key: value.squeeze(0).numpy() for key, value in agent_output["actions"].items()
             })
             actions = actions[obs.player]
         self.stopwatch.stop()
 
-        value = agent_output["baseline"].squeeze().cpu().numpy()[obs.player]
+        value = agent_output["baseline"].squeeze().numpy()[obs.player]
         value_msg = f"Turn: {self.game_state.turn} - Predicted value: {value:.2f}"
         timing_msg = f" - {str(self.stopwatch)}"
         actions.append(annotate.sidetext(value_msg))
@@ -169,22 +171,28 @@ class RLAgent:
             data: Union[torch.Tensor, Dict[str, torch.Tensor]],
             is_policy: bool
     ) -> Union[torch.Tensor, Dict[str, torch.Tensor]]:
-        if len(self.data_augmentations) == 0:
-            return data
-
+        """
+        Applies and concatenates all augmented observations into a single tensor/dict of tensors and moves the tensor
+        to the correct device for inference.
+        """
         if isinstance(data, dict):
             augmented_data = [data] + [augmentation.apply(data, inverse=False, is_policy=is_policy)
                                        for augmentation in self.data_augmentations]
             return {
-                key: torch.cat([d[key] for d in augmented_data], dim=0)
+                key: torch.cat([d[key] for d in augmented_data], dim=0).to(device=self.device)
                 for key in data.keys()
             }
         else:
             augmented_data = [data] + [augmentation.op(data, inverse=False, is_policy=is_policy)
                                        for augmentation in self.data_augmentations]
-            return torch.cat(augmented_data, dim=0)
+            return torch.cat(augmented_data, dim=0).to(device=self.device)
 
     def aggregate_augmented_predictions(self, policy: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        """
+        Moves the predictions to the cpu, applies the inverse of all augmentations,
+        and then returns the mean prediction for each available action.
+        """
+        policy = {key: val.cpu() for key, val in policy.items()}
         if len(self.data_augmentations) == 0:
             return policy
 
@@ -204,7 +212,7 @@ class RLAgent:
                 F.log_softmax(val.squeeze(0).squeeze(0), dim=-1),
                 start_dim=-3,
                 end_dim=-2
-            ).cpu()
+            )
             for key, val in agent_output["policy_logits"].items()
         }
         my_flat_log_probs = {
@@ -215,7 +223,7 @@ class RLAgent:
                 val.squeeze(0).squeeze(0)[obs.player],
                 start_dim=-3,
                 end_dim=-2
-            ).cpu()
+            )
             for key, val in agent_output["actions"].items()
         }
         # Use actions with highest prob/log_prob as highest priority
