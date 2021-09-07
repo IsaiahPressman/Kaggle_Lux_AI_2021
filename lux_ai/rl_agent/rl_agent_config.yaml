@@ -7,9 +7,12 @@ use_collision_detection: True
 # Has no effect when use_collision_detection is False
 must_research: False
 
+# NB: Kaggle servers are slow and do not provide time for inference on all augmentations
+# For medium (16-layer/128-wide) models, we can only use 2 data augmentations
+# For large (24-layer/128-wide) models, we can only use 1 data augmentation
 data_augmentations:
-  - VerticalFlip
-  - HorizontalFlip
-  - Rot90
+  #- VerticalFlip
+  #- HorizontalFlip
+  #- Rot90
   - Rot180
-  - Rot270
+  #- Rot270
