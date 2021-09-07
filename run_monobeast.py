@@ -45,7 +45,7 @@ def get_default_flags(flags: DictConfig) -> DictConfig:
     flags.setdefault("use_teacher", False)
 
     # Model params
-    flags.setdefault("learnable_pad_embedding", True)
+    flags.setdefault("use_index_select", True)
     if flags.get("use_index_select"):
         logging.info("index_select disables padding_index and is equivalent to using a learnable pad embedding.")
 
@@ -62,7 +62,7 @@ def get_default_flags(flags: DictConfig) -> DictConfig:
     return OmegaConf.create(flags)
 
 
-@hydra.main(config_path="conf", config_name="resume_config")
+@hydra.main(config_path="conf", config_name="conv_config")
 def main(flags: DictConfig):
     cli_conf = OmegaConf.from_cli()
     if Path("config.yaml").exists():
