@@ -1,0 +1,53 @@
+name: null
+project: Lux_AI_2021
+entity: isaiahpressman
+group: after_september_patch
+act_space: BasicActionSpace
+obs_space: FixedShapeContinuousObs
+obs_space_kwargs:
+  include_subtask_encoding: false
+reward_space: GameResultReward
+reward_space_kwargs: {}
+total_steps: 20000000.0
+num_actors: 2
+n_actor_envs: 16
+unroll_length: 16
+batch_size: 4
+discounting: 0.999
+model_arch: conv_model
+n_blocks: 24
+hidden_dim: 128
+n_merge_layers: 1
+normalize: false
+use_index_select: true
+rescale_value_input: true
+kernel_size: 5
+optimizer_class: Adam
+optimizer_kwargs:
+  lr: 5.0e-05
+  eps: 0.0003
+min_lr_mod: 0.01
+entropy_cost: 0.0002
+baseline_cost: 1.0
+teacher_kl_cost: 0.001
+lmb: 0.5
+reduction: sum
+use_teacher: true
+teacher_load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/09-05/00-32-47/
+teacher_checkpoint_file: 20000064.pt
+actor_device: cuda:1
+learner_device: cuda:0
+disable_wandb: false
+model_log_freq: 100
+sharing_strategy: file_descriptor
+load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/09-06/01-12-38/
+checkpoint_file: 08078656.pt
+weights_only: true
+n_value_warmup_batches: 0
+seed: null
+num_buffers: 4
+use_mixed_precision: true
+clip_grads: 10.0
+checkpoint_freq: 10.0
+num_learner_threads: 1
+debug: false
