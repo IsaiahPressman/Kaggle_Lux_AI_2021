@@ -11,8 +11,9 @@ must_research: False
 # For medium (16-layer/128-wide) models, we can only use 2 data augmentations
 # For large (24-layer/128-wide) models, we can only use 1 data augmentation
 data_augmentations:
+  - player_relative_reflection
   #- VerticalFlip
   #- HorizontalFlip
   #- Rot90
-  - Rot180
+  #- Rot180
   #- Rot270
