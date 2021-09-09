@@ -40,9 +40,9 @@ disable_wandb: false
 model_log_freq: 100
 show_timings: false
 sharing_strategy: file_descriptor
-load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/09-02/01-18-04/
-checkpoint_file: 04707968.pt
-weights_only: true
+load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/09-02/10-54-58/
+checkpoint_file: 16404288.pt
+weights_only: false
 n_value_warmup_batches: 0
 seed: null
 num_buffers: 4
@@ -51,3 +51,5 @@ clip_grads: 10.0
 checkpoint_freq: 10.0
 num_learner_threads: 1
 debug: false
+learnable_pad_embedding: true
+rescale_value_input: false

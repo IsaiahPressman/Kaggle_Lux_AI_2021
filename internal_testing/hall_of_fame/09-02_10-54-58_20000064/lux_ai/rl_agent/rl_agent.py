@@ -7,12 +7,13 @@ from types import SimpleNamespace
 from typing import *
 import yaml
 
+from . import data_augmentation
 from ..lux_gym import create_reward_space, LuxEnv, wrappers
 from ..lux_gym.act_spaces import ACTION_MEANINGS
 from ..utils import DEBUG_MESSAGE, RUNTIME_DEBUG_MESSAGE
 from ..utility_constants import MAX_RESEARCH, DN_CYCLE_LEN, MAX_BOARD_SIZE
-from ..nns import create_model
-from ..utils import flags_to_namespace
+from ..nns import create_model, models
+from ..utils import flags_to_namespace, Stopwatch
 
 from ..lux.game import Game
 from ..lux.game_objects import CityTile, Unit
@@ -38,11 +39,14 @@ class RLAgent:
             self.agent_flags = SimpleNamespace(**yaml.safe_load(f))
         if torch.cuda.is_available():
             if self.agent_flags.device == "player_id":
-                self.device = torch.device(f"cuda:{min(obs.player, torch.cuda.device_count())}")
+                device_id = f"cuda:{min(obs.player, torch.cuda.device_count() - 1)}"
             else:
-                self.device = torch.device(self.agent_flags.device)
+                device_id = self.agent_flags.device
         else:
-            self.device = torch.device("cpu")
+            device_id = "cpu"
+        self.device = torch.device(device_id)
+
+        # Build the env used to convert observations for the model
         env = LuxEnv(
             act_space=self.model_flags.act_space(),
             obs_space=self.model_flags.obs_space(),
@@ -54,9 +58,9 @@ class RLAgent:
         env = env.obs_space.wrap_env(env, reward_space)
         env = wrappers.PadFixedShapeEnv(env)
         env = wrappers.VecEnv([env])
-        env = wrappers.PytorchEnv(env, self.device)
+        # We'll move the data onto the target device necessary after preprocessing
+        env = wrappers.PytorchEnv(env, torch.device("cpu"))
         env = wrappers.DictEnv(env)
-
         self.env = env
         self.env.reset(observation_updates=obs["updates"], force=True)
         self.action_placeholder = {
@@ -64,11 +68,21 @@ class RLAgent:
             for key, space in self.unwrapped_env.action_space.get_action_space().spaces.items()
         }
 
+        # Load the model
         self.model = create_model(self.model_flags, self.device)
         checkpoint_states = torch.load(CHECKPOINT_PATH, map_location=self.device)
         self.model.load_state_dict(checkpoint_states["model_state_dict"])
         self.model.eval()
 
+        # Load the data augmenters
+        self.data_augmentations = []
+        for da_factory in self.agent_flags.data_augmentations:
+            da = data_augmentation.__dict__[da_factory](game_state=self.game_state)
+            if not isinstance(da, data_augmentation.DataAugmenter):
+                raise ValueError(f"Unrecognized data augmentation '{da}' created by: {da_factory}")
+            self.data_augmentations.append(da)
+
+        # Various utility properties
         self.me = self.game_state.players[obs.player]
         self.opp = self.game_state.players[(obs.player + 1) % 2]
         self.my_city_tile_mat = np.zeros(MAX_BOARD_SIZE, dtype=bool)
@@ -77,37 +91,52 @@ class RLAgent:
         self.loc_to_actionable_workers = {}
         self.loc_to_actionable_carts = {}
 
+        # Logging
+        self.stopwatch = Stopwatch()
+
     def __call__(self, obs, conf) -> List[str]:
+        self.stopwatch.reset()
+
+        self.stopwatch.start("Observation processing")
         self.preprocess(obs, conf)
         env_output = self.get_env_output()
-        with torch.no_grad():
-            agent_output = self.model.select_best_actions(env_output, actions_per_square=None)
-            # agent_output = self.model.sample_actions(env_output, actions_per_square=None)
+        relevant_env_output_augmented = {
+            "obs": self.augment_data(env_output["obs"], is_policy=False),
+            "info": {
+                "input_mask": self.augment_data(env_output["info"]["input_mask"].unsqueeze(1),
+                                                is_policy=False).squeeze(1),
+                "available_actions_mask": self.augment_data(env_output["info"]["available_actions_mask"],
+                                                            is_policy=True),
+            },
+        }
 
+        self.stopwatch.stop().start("Model inference")
+        with torch.no_grad():
+            agent_output_augmented = self.model.select_best_actions(relevant_env_output_augmented)
+            agent_output = {
+                "policy_logits": self.aggregate_augmented_predictions(agent_output_augmented["policy_logits"]),
+                "baseline": agent_output_augmented["baseline"].mean(dim=0, keepdim=True).cpu()
+            }
+            agent_output["actions"] = {
+                key: models.DictActor.logits_to_actions(val, sample=False, actions_per_square=None)
+                for key, val in agent_output["policy_logits"].items()
+            }
+
+        self.stopwatch.stop().start("Collision detection")
         if self.agent_flags.use_collision_detection:
             actions = self.resolve_collision_detection(obs, agent_output)
         else:
             actions, _ = self.unwrapped_env.process_actions({
-                key: value.squeeze(0).cpu().numpy() for key, value in agent_output["actions"].items()
+                key: value.squeeze(0).numpy() for key, value in agent_output["actions"].items()
             })
             actions = actions[obs.player]
+        self.stopwatch.stop()
 
-        """
-        # you can add debug annotations using the functions in the annotate object
-        i = game_state.turn + observation.player
-        actions.append(annotate.circle(i % width, i % height))
-        i += 1
-        actions.append(annotate.x(i % width, i % height))
-        i += 1
-        actions.append(annotate.line(i % width, i % height, (i + 3) % width, (i + 3) % height))
-        actions.append(annotate.text(0, 1, f"{game_state.turn}_Text!"))
-        actions.append(annotate.sidetext(f"Research points: {player.research_points}"))
-        """
-
-        value = agent_output["baseline"].squeeze().cpu().numpy()[obs.player]
-        info_msg = f"Turn: {self.game_state.turn} - Predicted value: {value:.2f}"
-        actions.append(annotate.sidetext(info_msg))
-        RUNTIME_DEBUG_MESSAGE(info_msg)
+        value = agent_output["baseline"].squeeze().numpy()[obs.player]
+        value_msg = f"Turn: {self.game_state.turn} - Predicted value: {value:.2f}"
+        timing_msg = f" - {str(self.stopwatch)}"
+        actions.append(annotate.sidetext(value_msg))
+        DEBUG_MESSAGE(value_msg + timing_msg)
         return actions
 
     def preprocess(self, obs, conf) -> NoReturn:
@@ -134,8 +163,50 @@ class RLAgent:
             if city_tile.can_act():
                 self.loc_to_actionable_city_tiles[pos_to_loc(city_tile.pos.astuple())] = city_tile
 
+        # TODO: Remove data augmentations if overage time is running out
+        # while obs["remaining_overage_time"]
+
     def get_env_output(self) -> Dict:
         return self.env.step(self.action_placeholder)
+
+    def augment_data(
+            self,
+            data: Union[torch.Tensor, Dict[str, torch.Tensor]],
+            is_policy: bool
+    ) -> Union[torch.Tensor, Dict[str, torch.Tensor]]:
+        """
+        Applies and concatenates all augmented observations into a single tensor/dict of tensors and moves the tensor
+        to the correct device for inference.
+        """
+        if isinstance(data, dict):
+            augmented_data = [data] + [augmentation.apply(data, inverse=False, is_policy=is_policy)
+                                       for augmentation in self.data_augmentations]
+            return {
+                key: torch.cat([d[key] for d in augmented_data], dim=0).to(device=self.device)
+                for key in data.keys()
+            }
+        else:
+            augmented_data = [data] + [augmentation.op(data, inverse=False, is_policy=is_policy)
+                                       for augmentation in self.data_augmentations]
+            return torch.cat(augmented_data, dim=0).to(device=self.device)
+
+    def aggregate_augmented_predictions(self, policy: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        """
+        Moves the predictions to the cpu, applies the inverse of all augmentations,
+        and then returns the mean prediction for each available action.
+        """
+        policy = {key: val.cpu() for key, val in policy.items()}
+        if len(self.data_augmentations) == 0:
+            return policy
+
+        policy_reoriented = [{key: val[0].unsqueeze(0) for key, val in policy.items()}]
+        for i, augmentation in enumerate(self.data_augmentations):
+            augmented_policy = {key: val[i + 1].unsqueeze(0) for key, val in policy.items()}
+            policy_reoriented.append(augmentation.apply(augmented_policy, inverse=True, is_policy=True))
+        return {
+            key: torch.cat([d[key] for d in policy_reoriented], dim=0).mean(dim=0, keepdim=True)
+            for key in policy.keys()
+        }
 
     def resolve_collision_detection(self, obs, agent_output) -> List[str]:
         # Get log_probs for all of my actions
@@ -144,7 +215,7 @@ class RLAgent:
                 F.log_softmax(val.squeeze(0).squeeze(0), dim=-1),
                 start_dim=-3,
                 end_dim=-2
-            ).cpu()
+            )
             for key, val in agent_output["policy_logits"].items()
         }
         my_flat_log_probs = {
@@ -155,7 +226,7 @@ class RLAgent:
                 val.squeeze(0).squeeze(0)[obs.player],
                 start_dim=-3,
                 end_dim=-2
-            ).cpu()
+            )
             for key, val in agent_output["actions"].items()
         }
         # Use actions with highest prob/log_prob as highest priority
