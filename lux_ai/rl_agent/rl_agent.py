@@ -134,9 +134,11 @@ class RLAgent:
 
         value = agent_output["baseline"].squeeze().numpy()[obs.player]
         value_msg = f"Turn: {self.game_state.turn} - Predicted value: {value:.2f}"
-        timing_msg = f" - {str(self.stopwatch)}"
+        timing_msg = f"{str(self.stopwatch)}"
+        overage_time_msg = f"Remaining overage time: {obs['remainingOverageTime']:.2f}"
+
         actions.append(annotate.sidetext(value_msg))
-        DEBUG_MESSAGE(value_msg + timing_msg)
+        DEBUG_MESSAGE(" - ".join([value_msg, timing_msg, overage_time_msg]))
         return actions
 
     def preprocess(self, obs, conf) -> NoReturn:
@@ -163,8 +165,10 @@ class RLAgent:
             if city_tile.can_act():
                 self.loc_to_actionable_city_tiles[pos_to_loc(city_tile.pos.astuple())] = city_tile
 
-        # TODO: Remove data augmentations if overage time is running out
-        # while obs["remaining_overage_time"]
+        # Remove data augmentations if there are fewer overage seconds than 2x the number of data augmentations
+        while max(obs["remainingOverageTime"], 0.) < len(self.data_augmentations) * 2:
+            DEBUG_MESSAGE(f"Removing data augmentation: {self.data_augmentations[-1]}")
+            del self.data_augmentations[-1]
 
     def get_env_output(self) -> Dict:
         return self.env.step(self.action_placeholder)

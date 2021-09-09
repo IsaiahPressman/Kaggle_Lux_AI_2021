@@ -70,6 +70,9 @@ class DataAugmenter(ABC):
     def op(self, t: torch.Tensor, inverse: bool, is_policy: bool) -> torch.Tensor:
         pass
 
+    def __repr__(self):
+        return self.__class__.__name__
+
     def _transform_policy(self, policy: Dict[str, torch.Tensor], inverse: bool) -> Dict[str, torch.Tensor]:
         if inverse:
             return {
