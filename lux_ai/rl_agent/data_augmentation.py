@@ -3,11 +3,13 @@ import torch
 from typing import Dict
 
 from ..lux.constants import Constants
+from ..lux.game import Game
 from ..lux_gym.act_spaces import ACTION_MEANINGS_TO_IDX
+from ..utils import DEBUG_MESSAGE
 
 
 class DataAugmenter(ABC):
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         directions_mapped_forward = self.get_directions_mapped()
         direction_mapped_inverse = {val: key for key, val in directions_mapped_forward.items()}
         assert len(directions_mapped_forward) == len(direction_mapped_inverse)
@@ -156,3 +158,13 @@ class Rot270(DataAugmenter):
         k = 1 if inverse else -1
         dims = (-3, -2) if is_policy else (-2, -1)
         return torch.rot90(t, k=k, dims=dims)
+
+
+def player_relative_reflection(game_state: Game) -> DataAugmenter:
+    p1_city_pos, p2_city_pos = [p.city_tiles[0].pos for p in game_state.players]
+    if p1_city_pos.x == p2_city_pos.x:
+        DEBUG_MESSAGE("Reflection mode: vertical")
+        return VerticalFlip()
+    else:
+        DEBUG_MESSAGE("Reflection mode: horizontal")
+        return HorizontalFlip()

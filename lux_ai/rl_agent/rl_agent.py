@@ -39,7 +39,7 @@ class RLAgent:
             self.agent_flags = SimpleNamespace(**yaml.safe_load(f))
         if torch.cuda.is_available():
             if self.agent_flags.device == "player_id":
-                device_id = f"cuda:{min(obs.player, torch.cuda.device_count())}"
+                device_id = f"cuda:{min(obs.player, torch.cuda.device_count() - 1)}"
             else:
                 device_id = self.agent_flags.device
         else:
@@ -76,11 +76,11 @@ class RLAgent:
 
         # Load the data augmenters
         self.data_augmentations = []
-        for da in self.agent_flags.data_augmentations:
-            cls = data_augmentation.__dict__[da]
-            if not (isinstance(cls, type) and issubclass(cls, data_augmentation.DataAugmenter)):
-                raise ValueError(f"Unrecognized data augmentation: {da}")
-            self.data_augmentations.append(cls())
+        for da_factory in self.agent_flags.data_augmentations:
+            da = data_augmentation.__dict__[da_factory](game_state=self.game_state)
+            if not isinstance(da, data_augmentation.DataAugmenter):
+                raise ValueError(f"Unrecognized data augmentation '{da}' created by: {da_factory}")
+            self.data_augmentations.append(da)
 
         # Various utility properties
         self.me = self.game_state.players[obs.player]
@@ -162,6 +162,9 @@ class RLAgent:
             self.my_city_tile_mat[city_tile.pos.x, city_tile.pos.y] = True
             if city_tile.can_act():
                 self.loc_to_actionable_city_tiles[pos_to_loc(city_tile.pos.astuple())] = city_tile
+
+        # TODO: Remove data augmentations if overage time is running out
+        # while obs["remaining_overage_time"]
 
     def get_env_output(self) -> Dict:
         return self.env.step(self.action_placeholder)
