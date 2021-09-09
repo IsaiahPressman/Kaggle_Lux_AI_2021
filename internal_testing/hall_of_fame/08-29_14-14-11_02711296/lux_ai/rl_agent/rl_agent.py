@@ -44,7 +44,7 @@ class RLAgent:
             self.agent_flags = SimpleNamespace(**yaml.safe_load(f))
         if torch.cuda.is_available():
             if self.agent_flags.device == "player_id":
-                self.device = torch.device(f"cuda:{min(obs.player, torch.cuda.device_count())}")
+                self.device = torch.device(f"cuda:{min(obs.player, torch.cuda.device_count() - 1)}")
             else:
                 self.device = torch.device(self.agent_flags.device)
         else:
