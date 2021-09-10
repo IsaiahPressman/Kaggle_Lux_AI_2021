@@ -142,7 +142,10 @@ class RLAgent:
         return actions
 
     def preprocess(self, obs, conf) -> NoReturn:
-        self.unwrapped_env.manual_step(obs["updates"])
+        # Do not call manual_step on the first turn, or you will be off-by-1 turn the entire game
+        if obs["step"] > 0:
+            self.unwrapped_env.manual_step(obs["updates"])
+
         self.me = self.game_state.players[obs.player]
         self.opp = self.game_state.players[(obs.player + 1) % 2]
 
@@ -343,7 +346,7 @@ class RLAgent:
         return self.unwrapped_env.game_state
 
     # Helper functions for debugging
-    def set_to_turn(self, obs, conf, turn: int) -> NoReturn:
+    def set_to_turn(self, obs, conf, turn: int):
         self.game_state.turn = turn - 1
         self(obs, conf)
 
