@@ -22,11 +22,6 @@ obs_space_kwargs:
   include_subtask_encoding: False
 reward_space: GameResultReward
 reward_space_kwargs: {}
-  #early_stop: True
-  #city: 2.
-  #unit: 1.
-  #fuel: 0.
-  #step: 0.005
 
 ## TRAINING params
 total_steps: 2e7
@@ -44,6 +39,7 @@ n_merge_layers: 1
 normalize: False
 use_index_select: True
 rescale_value_input: True
+rescale_se_input: True
 # Conv-specific params
 kernel_size: 5
 
@@ -51,7 +47,7 @@ kernel_size: 5
 ## OPTIMIZER params
 optimizer_class: Adam
 optimizer_kwargs:
-  lr: 2.5e-5
+  lr: 5e-5
   # See https://arxiv.org/pdf/2105.05246.pdf
   eps: 0.0003
   #alpha: 0.9
@@ -60,15 +56,15 @@ min_lr_mod: 0.01
 ## LOSS params
 entropy_cost: 0.0002
 baseline_cost: 1.
-teacher_kl_cost: 0.001
+teacher_kl_cost: 0.01
 # lambda parameter for TD-lambda and UPGO losses
 lmb: 0.5
 reduction: sum
 
 # Pretrained model for KL loss
 use_teacher: True
-teacher_load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/09-07/01-44-10/
-teacher_checkpoint_file: 10088000.pt
+teacher_load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/09-10/23-19-53/
+teacher_checkpoint_file: 18449152.pt
 
 # MISCELLANEOUS params
 actor_device: cuda:1
@@ -79,7 +75,7 @@ model_log_freq: 100
 sharing_strategy: file_descriptor
 
 # Continue from previous run
-load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/09-07/01-44-10/
-checkpoint_file: 10213056.pt
-weights_only: True
-n_value_warmup_batches: 0
+#load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/09-07/01-44-10/
+#checkpoint_file: 10213056.pt
+#weights_only: True
+#n_value_warmup_batches: 0
