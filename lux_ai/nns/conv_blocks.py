@@ -65,7 +65,7 @@ class ResidualBlock(nn.Module):
         self.act1 = activation()
 
         self.conv2 = nn.Conv2d(
-            in_channels=in_channels,
+            in_channels=out_channels,
             out_channels=out_channels,
             kernel_size=(kernel_size, kernel_size),
             padding=(padding, padding),
@@ -142,7 +142,7 @@ class ParallelDilationResidualBlock(nn.Module):
         self.act1_main = activation()
 
         self.conv2_main = nn.Conv2d(
-            in_channels=in_channels,
+            in_channels=out_channels,
             out_channels=out_channels,
             kernel_size=(kernel_size, kernel_size),
             padding=(padding_main, padding_main),
@@ -169,7 +169,7 @@ class ParallelDilationResidualBlock(nn.Module):
         self.act1_dilation = activation()
 
         self.conv2_dilation = nn.Conv2d(
-            in_channels=in_channels,
+            in_channels=out_channels,
             out_channels=out_channels,
             kernel_size=(kernel_size, kernel_size),
             padding=(padding_dilation, padding_dilation),
