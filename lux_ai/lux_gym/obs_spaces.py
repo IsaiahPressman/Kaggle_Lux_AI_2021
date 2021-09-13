@@ -14,7 +14,6 @@ from ..lux.game_constants import GAME_CONSTANTS
 WOOD = Constants.RESOURCE_TYPES.WOOD
 COAL = Constants.RESOURCE_TYPES.COAL
 URANIUM = Constants.RESOURCE_TYPES.URANIUM
-# TODO: Fix max fuel amount
 MAX_FUEL = 30 * 10 * 9
 ALL_SUBTASKS = []
 for rspace in reward_spaces.__dict__.values():
