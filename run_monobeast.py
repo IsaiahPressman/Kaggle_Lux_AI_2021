@@ -42,7 +42,7 @@ def get_default_flags(flags: DictConfig) -> DictConfig:
     flags.setdefault("checkpoint_freq", 10.)
     flags.setdefault("num_learner_threads", 1)
     flags.setdefault("use_teacher", False)
-    flags.setdefault("teacher_baseline_cost", flags["teacher_kl_cost"] / 2.)
+    flags.setdefault("teacher_baseline_cost", flags.get("teacher_kl_cost", 0.) / 2.)
 
     # Model params
     flags.setdefault("use_index_select", True)
