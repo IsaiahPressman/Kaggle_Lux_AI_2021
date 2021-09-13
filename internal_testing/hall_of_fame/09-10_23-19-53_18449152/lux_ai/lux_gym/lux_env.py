@@ -125,6 +125,7 @@ class LuxEnv(gym.Env):
     def reset(self, observation_updates: Optional[List[str]] = None) -> Tuple[Game, Tuple[float, float], bool, Dict]:
         self.game_state = Game()
         self.reset_count = (self.reset_count + 1) % self.restart_subproc_after_n_resets
+        # There seems to be a gradual memory leak somewhere, so we restart the dimension process every once in a while
         if self.reset_count == 0:
             self._restart_dimension_process()
         if self.run_game_automatically:

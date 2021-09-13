@@ -312,13 +312,9 @@ class Agent:
 
     @property
     def turns_until_day(self) -> int:
-        if not self.is_night:
+        if not self.game_state.is_night:
             return 0
         return max(NIGHT_LEN - (self.game_state.turn % DN_CYCLE_LEN - 30), 0)
-
-    @property
-    def is_night(self) -> bool:
-        return self.game_state.turn % DN_CYCLE_LEN >= DAY_LEN
 
     # Helper functions for debugging
     def set_to_turn(self, obs, conf, turn: int) -> NoReturn:

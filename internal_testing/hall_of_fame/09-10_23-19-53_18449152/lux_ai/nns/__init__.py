@@ -1,10 +1,13 @@
+import logging
+
 import torch
 from torch import nn
 
 from .models import BasicActorCriticNetwork
 from .in_blocks import ConvEmbeddingInputLayer
 from .attn_blocks import ViTBlock, RPSA, GPSA
-from .conv_blocks import FullConvResidualBlock
+from .conv_blocks import ResidualBlock, ParallelDilationResidualBlock
+from .unet import UNET
 from ..lux_gym.obs_spaces import SUBTASK_ENCODING
 from ..lux_gym.multi_subtask import MultiSubtask
 from ..utility_constants import MAX_BOARD_SIZE
@@ -21,15 +24,56 @@ def create_model(flags, device: torch.device) -> nn.Module:
                 n_merge_layers=flags.n_merge_layers,
                 use_index_select=flags.use_index_select
             ),
-            *[FullConvResidualBlock(
+            *[ResidualBlock(
                 in_channels=flags.hidden_dim,
                 out_channels=flags.hidden_dim,
                 height=MAX_BOARD_SIZE[0],
                 width=MAX_BOARD_SIZE[1],
                 kernel_size=flags.kernel_size,
                 normalize=flags.normalize,
-                activation=nn.LeakyReLU
+                activation=nn.LeakyReLU,
+                rescale_se_input=flags.rescale_se_input,
             ) for _ in range(flags.n_blocks)]
+        )
+    elif flags.model_arch == "pd_conv_model":
+        logging.warning("Dilation is slow for some Pytorch/CUDNN versions.")
+        base_model = nn.Sequential(
+            ConvEmbeddingInputLayer(
+                obs_space=obs_space.get_obs_spec(),
+                embedding_dim=flags.hidden_dim,
+                n_merge_layers=flags.n_merge_layers,
+                use_index_select=flags.use_index_select
+            ),
+            *[ParallelDilationResidualBlock(
+                in_channels=flags.hidden_dim,
+                out_channels=flags.hidden_dim,
+                height=MAX_BOARD_SIZE[0],
+                width=MAX_BOARD_SIZE[1],
+                kernel_size=flags.kernel_size,
+                normalize=flags.normalize,
+                activation=nn.LeakyReLU,
+                rescale_se_input=flags.rescale_se_input,
+            ) for _ in range(flags.n_blocks)]
+        )
+    elif flags.model_arch == "unet_model":
+        base_model = nn.Sequential(
+            ConvEmbeddingInputLayer(
+                obs_space=obs_space.get_obs_spec(),
+                embedding_dim=flags.hidden_dim,
+                n_merge_layers=flags.n_merge_layers,
+                use_index_select=flags.use_index_select
+            ),
+            UNET(
+                n_blocks_per_reduction=flags.n_blocks_per_reduction,
+                in_out_channels=flags.hidden_dim,
+                height=MAX_BOARD_SIZE[0],
+                width=MAX_BOARD_SIZE[1],
+                # Residual block kwargs
+                kernel_size=flags.kernel_size,
+                normalize=flags.normalize,
+                activation=nn.LeakyReLU,
+                rescale_se_input=flags.rescale_se_input,
+            )
         )
     elif flags.model_arch == "RPSA_model":
         base_model = nn.Sequential(
@@ -92,15 +136,3 @@ def create_model(flags, device: torch.device) -> nn.Module:
         rescale_value_input=flags.rescale_value_input
     )
     return model.to(device=device)
-
-
-"""
-def load_model(load_dir: Union[Path, str], model_checkpoint: str, device: torch.device):
-    flags = OmegaConf.load(load_dir + "/config.yaml")
-    flags.checkpoint = Path(load_dir) / (model_checkpoint + ".pt")
-    model = create_model(flags, device)
-    print(flags.checkpoint)
-    checkpoint_states = torch.load(flags.checkpoint, map_location=device)
-    model.load_state_dict(checkpoint_states["model_state_dict"])
-    return model
-"""
