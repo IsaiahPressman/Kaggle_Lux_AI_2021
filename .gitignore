@@ -9,17 +9,15 @@ __pycache__/
 
 # Scraped episodes
 episode_scraping/
-
 # Hydra experiment outputs
 outputs/
-
 # Rl agent config and .pt files
 lux_ai/rl_agent/config.yaml
 lux_ai/rl_agent/*.pt
-
 # RL agent copy for comparing different model weights
 main_2.py
 lux_ai/rl_agent_2/
-
 # Zipped submission files
 *.tar.gz
+# Retired internal testing agents
+internal_testing/hall_of_fame/retired/
