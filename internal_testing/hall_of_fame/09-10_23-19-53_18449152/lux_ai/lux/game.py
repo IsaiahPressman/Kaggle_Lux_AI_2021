@@ -1,8 +1,10 @@
 from .constants import Constants
+from .game_constants import GAME_CONSTANTS
 from .game_map import GameMap
 from .game_objects import Player, Unit, City
 
 INPUT_CONSTANTS = Constants.INPUT_CONSTANTS
+DN_CYCLE_LEN = GAME_CONSTANTS["PARAMETERS"]["DAY_LENGTH"] + GAME_CONSTANTS["PARAMETERS"]["NIGHT_LENGTH"]
 
 
 class Game:
@@ -86,3 +88,7 @@ class Game:
                 y = int(strs[2])
                 road = float(strs[3])
                 self.map.get_cell(x, y).road = road
+
+    @property
+    def is_night(self) -> bool:
+        return self.turn % DN_CYCLE_LEN >= GAME_CONSTANTS["PARAMETERS"]["DAY_LENGTH"]

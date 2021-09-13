@@ -1,6 +1,7 @@
 import numpy as np
 import os
 from pathlib import Path
+import time
 import torch
 import torch.nn.functional as F
 from types import SimpleNamespace
@@ -10,7 +11,7 @@ import yaml
 from . import data_augmentation
 from ..lux_gym import create_reward_space, LuxEnv, wrappers
 from ..lux_gym.act_spaces import ACTION_MEANINGS
-from ..utils import DEBUG_MESSAGE, RUNTIME_DEBUG_MESSAGE
+from ..utils import DEBUG_MESSAGE, RUNTIME_DEBUG_MESSAGE, LOCAL_EVAL
 from ..utility_constants import MAX_RESEARCH, DN_CYCLE_LEN, MAX_BOARD_SIZE
 from ..nns import create_model, models
 from ..utils import flags_to_namespace, Stopwatch
@@ -134,13 +135,18 @@ class RLAgent:
 
         value = agent_output["baseline"].squeeze().numpy()[obs.player]
         value_msg = f"Turn: {self.game_state.turn} - Predicted value: {value:.2f}"
-        timing_msg = f" - {str(self.stopwatch)}"
+        timing_msg = f"{str(self.stopwatch)}"
+        overage_time_msg = f"Remaining overage time: {obs['remainingOverageTime']:.2f}"
+
         actions.append(annotate.sidetext(value_msg))
-        DEBUG_MESSAGE(value_msg + timing_msg)
+        DEBUG_MESSAGE(" - ".join([value_msg, timing_msg, overage_time_msg]))
         return actions
 
     def preprocess(self, obs, conf) -> NoReturn:
-        self.unwrapped_env.manual_step(obs["updates"])
+        # Do not call manual_step on the first turn, or you will be off-by-1 turn the entire game
+        if obs["step"] > 0:
+            self.unwrapped_env.manual_step(obs["updates"])
+
         self.me = self.game_state.players[obs.player]
         self.opp = self.game_state.players[(obs.player + 1) % 2]
 
@@ -163,8 +169,10 @@ class RLAgent:
             if city_tile.can_act():
                 self.loc_to_actionable_city_tiles[pos_to_loc(city_tile.pos.astuple())] = city_tile
 
-        # TODO: Remove data augmentations if overage time is running out
-        # while obs["remaining_overage_time"]
+        # Remove data augmentations if there are fewer overage seconds than 2x the number of data augmentations
+        while max(obs["remainingOverageTime"], 0.) < len(self.data_augmentations) * 2:
+            DEBUG_MESSAGE(f"Removing data augmentation: {self.data_augmentations[-1]}")
+            del self.data_augmentations[-1]
 
     def get_env_output(self) -> Dict:
         return self.env.step(self.action_placeholder)
@@ -339,13 +347,17 @@ class RLAgent:
         return self.unwrapped_env.game_state
 
     # Helper functions for debugging
-    def set_to_turn(self, obs, conf, turn: int) -> NoReturn:
+    def set_to_turn(self, obs, conf, turn: int):
         self.game_state.turn = turn - 1
         self(obs, conf)
 
 
 def agent(obs, conf) -> List[str]:
     global AGENT
+    turn_start_time = time.time()
     if AGENT is None:
         AGENT = RLAgent(obs, conf)
+    # Minimum turn length for local eval
+    if LOCAL_EVAL and time.time() - turn_start_time < 0.1:
+        time.sleep(time.time() - turn_start_time)
     return AGENT(obs, conf)

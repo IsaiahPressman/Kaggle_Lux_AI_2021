@@ -1,4 +1,4 @@
-name: conv_phase4_small_teacher
+name: null
 project: Lux_AI_2021
 entity: isaiahpressman
 group: after_september_patch
@@ -15,33 +15,33 @@ unroll_length: 16
 batch_size: 4
 discounting: 0.999
 model_arch: conv_model
-n_blocks: 16
+n_blocks: 24
 hidden_dim: 128
 n_merge_layers: 1
 normalize: false
 use_index_select: true
+rescale_value_input: true
 kernel_size: 5
 optimizer_class: Adam
 optimizer_kwargs:
-  lr: 5.0e-05
+  lr: 2.5e-05
   eps: 0.0003
 min_lr_mod: 0.01
 entropy_cost: 0.0002
 baseline_cost: 1.0
 teacher_kl_cost: 0.001
-lmb: 0.8
+lmb: 0.5
 reduction: sum
 use_teacher: true
-teacher_load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/09-02/01-18-04/
-teacher_checkpoint_file: 04707968.pt
+teacher_load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/09-07/01-44-10/
+teacher_checkpoint_file: 10088000.pt
 actor_device: cuda:1
 learner_device: cuda:0
 disable_wandb: false
 model_log_freq: 100
-show_timings: false
 sharing_strategy: file_descriptor
-load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/09-02/10-54-58/
-checkpoint_file: 16404288.pt
+load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/09-10/13-55-48/
+checkpoint_file: 12233728.pt
 weights_only: false
 n_value_warmup_batches: 0
 seed: null
@@ -51,5 +51,4 @@ clip_grads: 10.0
 checkpoint_freq: 10.0
 num_learner_threads: 1
 debug: false
-learnable_pad_embedding: true
-rescale_value_input: false
+rescale_se_input: false
