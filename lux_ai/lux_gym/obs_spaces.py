@@ -233,7 +233,7 @@ class _FixedShapeContinuousObsWrapper(gym.Wrapper):
             obs["research_points"][0, p_id] = min(player.research_points / max_research, 1.)
             obs["researched_coal"][0, p_id] = player.researched_coal()
             obs["researched_uranium"][0, p_id] = player.researched_uranium()
-        obs["night"][0, 0] = observation.turn % DN_CYCLE_LEN >= GAME_CONSTANTS["PARAMETERS"]["DAY_LENGTH"]
+        obs["night"][0, 0] = observation.is_night
         obs["day_night_cycle"][0, 0] = (observation.turn % DN_CYCLE_LEN) / DN_CYCLE_LEN
         obs["phase"][0, 0] = min(
             observation.turn // DN_CYCLE_LEN,
@@ -487,7 +487,7 @@ class _FixedShapeEmbeddingObsWrapper(gym.Wrapper):
             obs["research_points"][0, p_id] = min(player.research_points / max_research, 1.)
             obs["researched_coal"][0, p_id] = player.researched_coal()
             obs["researched_uranium"][0, p_id] = player.researched_uranium()
-        obs["night"][0, 0] = observation.turn % DN_CYCLE_LEN >= GAME_CONSTANTS["PARAMETERS"]["DAY_LENGTH"]
+        obs["night"][0, 0] = observation.is_night
         obs["day_night_cycle"][0, 0] = observation.turn % DN_CYCLE_LEN
         obs["phase"][0, 0] = min(
             observation.turn // DN_CYCLE_LEN,
@@ -749,7 +749,7 @@ class _SequenceEmbeddingObsWrapper(gym.Wrapper):
                 obs["researched_uranium"][0, 1] = player.researched_uranium()
                 obs["researched_uranium"][1, 0] = player.researched_uranium()
 
-        obs["night"][:, 0] = observation.turn % DN_CYCLE_LEN >= GAME_CONSTANTS["PARAMETERS"]["DAY_LENGTH"]
+        obs["night"][:, 0] = observation.is_night
         obs["day_night_cycle"][:, 0] = (observation.turn % DN_CYCLE_LEN) / DN_CYCLE_LEN
         obs["phase"][0, 0] = min(
             observation.turn // DN_CYCLE_LEN,
