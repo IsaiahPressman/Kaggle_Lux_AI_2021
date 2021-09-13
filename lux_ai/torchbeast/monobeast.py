@@ -42,7 +42,6 @@ from ..utils import flags_to_namespace
 
 
 KL_DIV_LOSS = nn.KLDivLoss(reduction="none")
-# TODO: Reformat logging
 logging.basicConfig(
     format=(
         "[%(levelname)s:%(process)d %(module)s:%(lineno)d %(asctime)s] " "%(message)s"
@@ -153,7 +152,7 @@ def reduce(losses: torch.Tensor, reduction: str) -> torch.Tensor:
         raise ValueError(f"Reduction must be one of 'sum' or 'mean', was: {reduction}")
 
 
-def compute_baseline_loss(value_targets: torch.Tensor, values: torch.Tensor, reduction: str) -> torch.Tensor:
+def compute_baseline_loss(values: torch.Tensor, value_targets: torch.Tensor, reduction: str) -> torch.Tensor:
     baseline_loss = F.smooth_l1_loss(values, value_targets.detach(), reduction="none")
     return reduce(baseline_loss, reduction=reduction)
 
@@ -400,23 +399,36 @@ def learn(
                 reduction=flags.reduction
             )
             baseline_loss = compute_baseline_loss(
-                td_lambda_returns.vs,
                 values,
+                td_lambda_returns.vs,
                 reduction=flags.reduction
             )
             teacher_kl_loss = flags.teacher_kl_cost * reduce(
                 combined_teacher_kl_loss,
                 reduction=flags.reduction
             )
+            if flags.use_teacher:
+                teacher_baseline_loss = flags.teacher_baseline_cost * compute_baseline_loss(
+                    values,
+                    teacher_outputs["baseline"],
+                    reduction=flags.reduction
+                )
+            else:
+                teacher_baseline_loss = torch.zeros_like(baseline_loss)
             entropy_loss = flags.entropy_cost * reduce(
                 combined_learner_entropy,
                 reduction=flags.reduction
             )
             if baseline_only:
-                total_loss = baseline_loss
+                total_loss = baseline_loss + teacher_baseline_loss
                 vtrace_pg_loss, upgo_pg_loss, teacher_kl_loss, entropy_loss = torch.zeros(4) + float("nan")
             else:
-                total_loss = vtrace_pg_loss + upgo_pg_loss + baseline_loss + teacher_kl_loss + entropy_loss
+                total_loss = (vtrace_pg_loss +
+                              upgo_pg_loss +
+                              baseline_loss +
+                              teacher_kl_loss +
+                              teacher_baseline_loss +
+                              entropy_loss)
 
             last_lr = lr_scheduler.get_last_lr()
             assert len(last_lr) == 1, 'Logging per-parameter LR still needs support'
@@ -466,6 +478,7 @@ def learn(
                     "upgo_pg_loss": upgo_pg_loss.detach().item(),
                     "baseline_loss": baseline_loss.detach().item(),
                     "teacher_kl_loss": teacher_kl_loss.detach().item(),
+                    "teacher_baseline_loss": teacher_baseline_loss.detach().item(),
                     "entropy_loss": entropy_loss.detach().item(),
                     "total_loss": total_loss.detach().item(),
                 },
@@ -572,8 +585,9 @@ def train(flags):
 
     # Load teacher model for KL loss
     if flags.use_teacher:
-        if flags.teacher_kl_cost <= 0.:
-            raise ValueError("It does not make sense to use teacher when teacher_kl_cost <= 0.")
+        if flags.teacher_kl_cost <= 0. and flags.teacher_baseline_cost <= 0.:
+            raise ValueError("It does not make sense to use teacher when teacher_kl_cost <= 0 "
+                             "and teacher_baseline_cost <= 0")
         teacher_flags = OmegaConf.load(Path(flags.teacher_load_dir) / "config.yaml")
         teacher_flags = flags_to_namespace(OmegaConf.to_container(teacher_flags))
         teacher_model = create_model(teacher_flags, flags.learner_device)
@@ -589,7 +603,11 @@ def train(flags):
         if flags.teacher_kl_cost > 0.:
             logging.warning(f"flags.teacher_kl_cost is {flags.teacher_kl_cost}, but use_teacher is False. "
                             f"Setting flags.teacher_kl_cost to 0.")
+        if flags.teacher_baseline_cost > 0.:
+            logging.warning(f"flags.teacher_baseline_cost is {flags.teacher_baseline_cost}, but use_teacher is False. "
+                            f"Setting flags.teacher_baseline_cost to 0.")
         flags.teacher_kl_cost = 0.
+        flags.teacher_baseline_cost = 0.
 
     def lr_lambda(epoch):
         min_pct = flags.min_lr_mod

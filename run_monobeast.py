@@ -18,7 +18,6 @@ from lux_ai.torchbeast.monobeast import train
 
 os.environ["OMP_NUM_THREADS"] = "1"
 
-# TODO Reformat logging basic config
 logging.basicConfig(
     format=(
         "[%(levelname)s:%(process)d %(module)s:%(lineno)d %(asctime)s] " "%(message)s"
@@ -43,6 +42,7 @@ def get_default_flags(flags: DictConfig) -> DictConfig:
     flags.setdefault("checkpoint_freq", 10.)
     flags.setdefault("num_learner_threads", 1)
     flags.setdefault("use_teacher", False)
+    flags.setdefault("teacher_baseline_cost", flags["teacher_kl_cost"] / 2.)
 
     # Model params
     flags.setdefault("use_index_select", True)
@@ -62,7 +62,7 @@ def get_default_flags(flags: DictConfig) -> DictConfig:
     return OmegaConf.create(flags)
 
 
-@hydra.main(config_path="conf", config_name="conv_config")
+@hydra.main(config_path="conf", config_name="resume_config")
 def main(flags: DictConfig):
     cli_conf = OmegaConf.from_cli()
     if Path("config.yaml").exists():
