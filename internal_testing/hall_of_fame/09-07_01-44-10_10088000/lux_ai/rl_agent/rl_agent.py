@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 import torch
 import torch.nn.functional as F
+import time
 from types import SimpleNamespace
 from typing import *
 import yaml
@@ -10,7 +11,7 @@ import yaml
 from . import data_augmentation
 from ..lux_gym import create_reward_space, LuxEnv, wrappers
 from ..lux_gym.act_spaces import ACTION_MEANINGS
-from ..utils import DEBUG_MESSAGE, RUNTIME_DEBUG_MESSAGE
+from ..utils import DEBUG_MESSAGE, RUNTIME_DEBUG_MESSAGE, LOCAL_EVAL
 from ..utility_constants import MAX_RESEARCH, DN_CYCLE_LEN, MAX_BOARD_SIZE
 from ..nns import create_model, models
 from ..utils import flags_to_namespace, Stopwatch
@@ -350,6 +351,11 @@ class RLAgent:
 
 def agent(obs, conf) -> List[str]:
     global AGENT
+    turn_start_time = time.time()
     if AGENT is None:
         AGENT = RLAgent(obs, conf)
-    return AGENT(obs, conf)
+    actions = AGENT(obs, conf)
+    # Minimum turn length for local eval
+    if LOCAL_EVAL and time.time() - turn_start_time < 0.1:
+        time.sleep(time.time() - turn_start_time)
+    return actions
