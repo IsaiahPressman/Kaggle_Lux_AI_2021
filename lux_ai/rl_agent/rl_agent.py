@@ -1,7 +1,6 @@
 import numpy as np
 import os
 from pathlib import Path
-import time
 import torch
 import torch.nn.functional as F
 from types import SimpleNamespace
@@ -95,7 +94,7 @@ class RLAgent:
         # Logging
         self.stopwatch = Stopwatch()
 
-    def __call__(self, obs, conf) -> List[str]:
+    def __call__(self, obs, conf, raw_model_output: bool = False):
         self.stopwatch.reset()
 
         self.stopwatch.start("Observation processing")
@@ -122,6 +121,9 @@ class RLAgent:
                 key: models.DictActor.logits_to_actions(val, sample=False, actions_per_square=None)
                 for key, val in agent_output["policy_logits"].items()
             }
+        # Used for debugging and visualization
+        if raw_model_output:
+            return agent_output
 
         self.stopwatch.stop().start("Collision detection")
         if self.agent_flags.use_collision_detection:
@@ -347,17 +349,13 @@ class RLAgent:
         return self.unwrapped_env.game_state
 
     # Helper functions for debugging
-    def set_to_turn(self, obs, conf, turn: int):
-        self.game_state.turn = turn - 1
-        self(obs, conf)
+    def set_to_turn_and_call(self, turn: int, *args, **kwargs):
+        self.game_state.turn = max(turn - 1, 0)
+        return self(*args, **kwargs)
 
 
 def agent(obs, conf) -> List[str]:
     global AGENT
-    turn_start_time = time.time()
     if AGENT is None:
         AGENT = RLAgent(obs, conf)
-    # Minimum turn length for local eval
-    if LOCAL_EVAL and time.time() - turn_start_time < 0.1:
-        time.sleep(time.time() - turn_start_time)
     return AGENT(obs, conf)

@@ -3,7 +3,6 @@ import os
 from pathlib import Path
 import torch
 import torch.nn.functional as F
-import time
 from types import SimpleNamespace
 from typing import *
 import yaml
@@ -351,11 +350,6 @@ class RLAgent:
 
 def agent(obs, conf) -> List[str]:
     global AGENT
-    turn_start_time = time.time()
     if AGENT is None:
         AGENT = RLAgent(obs, conf)
-    actions = AGENT(obs, conf)
-    # Minimum turn length for local eval
-    if LOCAL_EVAL and time.time() - turn_start_time < 0.1:
-        time.sleep(time.time() - turn_start_time)
-    return actions
+    return AGENT(obs, conf)
