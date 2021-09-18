@@ -8,6 +8,6 @@ hydra:
 
 
 # Continue from previous run
-load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/09-10/13-55-48/
-checkpoint_file: 12233728.pt
+load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/09-16/23-02-06/
+checkpoint_file: 15712896.pt
 weights_only: False
