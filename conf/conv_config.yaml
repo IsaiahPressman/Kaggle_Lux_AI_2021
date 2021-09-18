@@ -39,7 +39,7 @@ n_merge_layers: 1
 normalize: False
 use_index_select: True
 rescale_value_input: True
-rescale_se_input: True
+rescale_se_input: False
 # Conv-specific params
 kernel_size: 5
 
@@ -56,7 +56,8 @@ min_lr_mod: 0.01
 ## LOSS params
 entropy_cost: 0.0002
 baseline_cost: 1.
-teacher_kl_cost: 0.01
+teacher_kl_cost: 0.005
+teacher_baseline_cost: 0.0
 # lambda parameter for TD-lambda and UPGO losses
 lmb: 0.5
 reduction: sum

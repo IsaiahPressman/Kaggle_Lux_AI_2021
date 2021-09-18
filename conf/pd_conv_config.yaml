@@ -24,7 +24,7 @@ reward_space: GameResultReward
 reward_space_kwargs: {}
 
 ## TRAINING params
-total_steps: 2e7
+total_steps: 2.5e6
 num_actors: 2
 n_actor_envs: 16
 unroll_length: 16
@@ -32,14 +32,14 @@ batch_size: 4
 discounting: 0.999
 
 ## MODEL params
-model_arch: unet_model
-n_blocks_per_reduction: 1
+model_arch: pd_conv_model
+n_blocks: 12
 hidden_dim: 128
 n_merge_layers: 1
 normalize: False
 use_index_select: True
 rescale_value_input: True
-rescale_se_input: False
+rescale_se_input: True
 # Conv-specific params
 kernel_size: 5
 
@@ -57,7 +57,6 @@ min_lr_mod: 0.01
 entropy_cost: 0.0002
 baseline_cost: 1.
 teacher_kl_cost: 0.01
-teacher_baseline_cost: 0.0
 # lambda parameter for TD-lambda and UPGO losses
 lmb: 0.5
 reduction: sum
@@ -65,7 +64,7 @@ reduction: sum
 # Pretrained model for KL loss
 use_teacher: True
 teacher_load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/09-10/23-19-53/
-teacher_checkpoint_file: 18491136.pt
+teacher_checkpoint_file: 18449152.pt
 
 # MISCELLANEOUS params
 actor_device: cuda:1
