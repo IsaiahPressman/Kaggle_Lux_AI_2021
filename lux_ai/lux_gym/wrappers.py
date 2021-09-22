@@ -6,8 +6,7 @@ from typing import Dict, List, NoReturn, Optional, Tuple, Union
 
 from .act_spaces import ACTION_MEANINGS
 from .lux_env import LuxEnv
-from .obs_spaces import SUBTASK_ENCODING
-from .reward_spaces import BaseRewardSpace, Subtask
+from .reward_spaces import BaseRewardSpace
 from ..utility_constants import MAX_BOARD_SIZE
 
 
@@ -81,19 +80,13 @@ class RewardSpaceWrapper(gym.Wrapper):
         self.unwrapped.done = done
         return rewards, done
 
-    def non_logging_info(self) -> Dict[str, np.ndarray]:
-        if isinstance(self.reward_space, Subtask):
-            return {"subtask_embeddings": np.array([self.reward_space.get_subtask_encoding(SUBTASK_ENCODING)])}
-        else:
-            return {}
-
     def reset(self, **kwargs):
         obs, _, _, info = super(RewardSpaceWrapper, self).reset(**kwargs)
-        return (obs, *self._get_rewards_and_done(), dict(**info, **self.non_logging_info()))
+        return (obs, *self._get_rewards_and_done(), info)
 
     def step(self, action):
         obs, _, _, info = super(RewardSpaceWrapper, self).step(action)
-        return (obs, *self._get_rewards_and_done(), dict(**info, **self.non_logging_info()))
+        return (obs, *self._get_rewards_and_done(), info)
 
 
 class LoggingEnv(gym.Wrapper):

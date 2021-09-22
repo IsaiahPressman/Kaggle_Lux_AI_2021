@@ -3,9 +3,8 @@ from abc import ABC, abstractmethod
 import gym
 import itertools
 import numpy as np
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
-from . import reward_spaces
 from ..utility_constants import DN_CYCLE_LEN, MAX_RESOURCE, MAX_BOARD_SIZE
 from ..lux.constants import Constants
 from ..lux.game import Game
@@ -15,26 +14,11 @@ WOOD = Constants.RESOURCE_TYPES.WOOD
 COAL = Constants.RESOURCE_TYPES.COAL
 URANIUM = Constants.RESOURCE_TYPES.URANIUM
 MAX_FUEL = 30 * 10 * 9
-ALL_SUBTASKS = []
-for rspace in reward_spaces.__dict__.values():
-    if isinstance(rspace, type) and issubclass(rspace, reward_spaces.Subtask) and rspace is not reward_spaces.Subtask:
-        ALL_SUBTASKS.append(rspace)
-ALL_SUBTASKS.append(None)
-SUBTASK_ENCODING = {
-    task: i for i, task in enumerate(ALL_SUBTASKS)
-}
 # Player count
 P = 2
 
 
 class BaseObsSpace(ABC):
-    def __init__(self, include_subtask_encoding: bool = False, override_n_subtasks: Optional[int] = None):
-        self.include_subtask_encoding = include_subtask_encoding
-        if override_n_subtasks:
-            self.n_subtasks = override_n_subtasks
-        else:
-            self.n_subtasks = len(SUBTASK_ENCODING)
-
     # NB: Avoid using Discrete() space, as it returns a shape of ()
     # NB: "_COUNT" keys indicate that the value is used to scale the embedding of another value
     @abstractmethod
@@ -42,27 +26,35 @@ class BaseObsSpace(ABC):
             self,
             board_dims: Tuple[int, int] = MAX_BOARD_SIZE
     ) -> gym.spaces.Dict:
-        if self.include_subtask_encoding:
-            return self.get_subtask_encoding(board_dims)
-        else:
-            return gym.spaces.Dict({})
-
-    @abstractmethod
-    def get_subtask_encoding(self, board_dims: Tuple[int, int] = MAX_BOARD_SIZE) -> gym.spaces.Dict:
         pass
 
     @abstractmethod
-    def wrap_env(self, env, reward_space: Optional[reward_spaces.BaseRewardSpace]) -> gym.Wrapper:
+    def wrap_env(self, env) -> gym.Wrapper:
         pass
 
 
 class FixedShapeObs(BaseObsSpace, ABC):
-    def get_subtask_encoding(self, board_dims: Tuple[int, int] = MAX_BOARD_SIZE) -> gym.spaces.Dict:
-        x = board_dims[0]
-        y = board_dims[1]
+    pass
+
+
+class MultiObs(BaseObsSpace):
+    def __init__(self, named_obs_spaces: Dict[str, BaseObsSpace], *args, **kwargs):
+        super(MultiObs, self).__init__(*args, **kwargs)
+        self.named_obs_spaces = named_obs_spaces
+
+    def get_obs_spec(
+            self,
+            board_dims: Tuple[int, int] = MAX_BOARD_SIZE
+    ) -> gym.spaces.Dict:
         return gym.spaces.Dict({
-            "subtask": gym.spaces.MultiDiscrete(np.zeros((1, 1, x, y), dtype=int) + self.n_subtasks)
+            name + key: val
+            for name, obs_space in self.named_obs_spaces.items()
+            for key, val in obs_space.get_obs_spec().spaces.items()
         })
+
+    def wrap_env(self, env) -> gym.Wrapper:
+        pass
+        # TODO
 
 
 class FixedShapeContinuousObs(FixedShapeObs):
@@ -70,7 +62,6 @@ class FixedShapeContinuousObs(FixedShapeObs):
             self,
             board_dims: Tuple[int, int] = MAX_BOARD_SIZE
     ) -> gym.spaces.Dict:
-        subtask_encoding = super(FixedShapeContinuousObs, self).get_obs_spec(board_dims)
         x = board_dims[0]
         y = board_dims[1]
         return gym.spaces.Dict({
@@ -133,28 +124,18 @@ class FixedShapeContinuousObs(FixedShapeObs):
             ),
             # The turn number, normalized from 0-360
             "turn": gym.spaces.Box(0., 1., shape=(1, 1)),
-            **subtask_encoding.spaces
         })
 
-    def wrap_env(self, env, subtask_reward_space: Optional[reward_spaces.Subtask] = None) -> gym.Wrapper:
-        return _FixedShapeContinuousObsWrapper(env, self.include_subtask_encoding, subtask_reward_space)
+    def wrap_env(self, env) -> gym.Wrapper:
+        return _FixedShapeContinuousObsWrapper(env)
 
 
 class _FixedShapeContinuousObsWrapper(gym.Wrapper):
     def __init__(
             self,
             env: gym.Env,
-            include_subtask_encoding: bool,
-            subtask_reward_space: Optional[reward_spaces.Subtask]
     ):
         super(_FixedShapeContinuousObsWrapper, self).__init__(env)
-        if include_subtask_encoding:
-            if subtask_reward_space is None:
-                raise ValueError("Cannot use subtask_encoding without providing subtask_reward_space.")
-            elif not isinstance(subtask_reward_space, reward_spaces.Subtask):
-                raise ValueError("Reward_space must be an instance of Subtask")
-        self.include_subtask_encoding = include_subtask_encoding
-        self.subtask_reward_space = subtask_reward_space
         self._empty_obs = {}
         for key, spec in self.observation_space.spaces.items():
             if isinstance(spec, gym.spaces.MultiBinary) or isinstance(spec, gym.spaces.MultiDiscrete):
@@ -241,9 +222,6 @@ class _FixedShapeContinuousObsWrapper(gym.Wrapper):
         )
         obs["turn"][0, 0] = observation.turn / GAME_CONSTANTS["PARAMETERS"]["MAX_DAYS"]
 
-        if self.include_subtask_encoding:
-            obs["subtask"][:] = self.subtask_reward_space.get_subtask_encoding(SUBTASK_ENCODING)
-
         return obs
 
 
@@ -256,8 +234,7 @@ class FixedShapeEmbeddingObs(FixedShapeObs):
             self,
             board_dims: Tuple[int, int] = MAX_BOARD_SIZE
     ) -> gym.spaces.Dict:
-        raise NotImplementedError("This class needs upkeep after the patch")
-        subtask_encoding = super(FixedShapeEmbeddingObs, self).get_obs_spec(board_dims)
+        raise NotImplementedError("This class needs upkeep after the August patch")
         x = board_dims[0]
         y = board_dims[1]
         return gym.spaces.Dict({
@@ -328,29 +305,19 @@ class FixedShapeEmbeddingObs(FixedShapeObs):
             # The number of turns
             # "turn": gym.spaces.MultiDiscrete(np.zeros((1, 1)) + GAME_CONSTANTS["PARAMETERS"]["MAX_DAYS"]),
             "turn": gym.spaces.Box(0., 1., shape=(1, 1)),
-            **subtask_encoding.spaces
         })
 
-    def wrap_env(self, env, subtask_reward_space: Optional[reward_spaces.Subtask] = None) -> gym.Wrapper:
-        return _FixedShapeEmbeddingObsWrapper(env, self.include_subtask_encoding, subtask_reward_space)
+    def wrap_env(self, env) -> gym.Wrapper:
+        return _FixedShapeEmbeddingObsWrapper(env)
 
 
 class _FixedShapeEmbeddingObsWrapper(gym.Wrapper):
     def __init__(
             self,
-            env: gym.Env,
-            include_subtask_encoding: bool,
-            subtask_reward_space: Optional[reward_spaces.Subtask]
+            env: gym.Env
     ):
         super(_FixedShapeEmbeddingObsWrapper, self).__init__(env)
-        raise NotImplementedError("This class needs upkeep after the patch")
-        if include_subtask_encoding:
-            if subtask_reward_space is None:
-                raise ValueError("Cannot use subtask_encoding without providing subtask_reward_space.")
-            elif not isinstance(subtask_reward_space, reward_spaces.Subtask):
-                raise ValueError("Reward_space must be an instance of Subtask")
-        self.include_subtask_encoding = include_subtask_encoding
-        self.subtask_reward_space = subtask_reward_space
+        raise NotImplementedError("This class needs upkeep after the August patch")
         self._empty_obs = {}
         for key, spec in self.observation_space.spaces.items():
             if isinstance(spec, gym.spaces.MultiBinary) or isinstance(spec, gym.spaces.MultiDiscrete):
@@ -498,9 +465,6 @@ class _FixedShapeEmbeddingObsWrapper(gym.Wrapper):
         """
         obs["turn"][0, 0] = observation.turn / GAME_CONSTANTS["PARAMETERS"]["MAX_DAYS"]
 
-        if self.include_subtask_encoding:
-            obs["subtask"][:] = self.subtask_reward_space.get_subtask_encoding(SUBTASK_ENCODING)
-
         return obs
 
 
@@ -520,12 +484,6 @@ class SequenceObs(BaseObsSpace, ABC):
     ]
     _entity_encodings = {val: i for i, val in enumerate(_entities)}
 
-    def get_subtask_encoding(self, board_dims: Tuple[int, int] = MAX_BOARD_SIZE) -> gym.spaces.Dict:
-        seq_len = board_dims[0] * board_dims[1]
-        return gym.spaces.Dict({
-            "subtask": gym.spaces.MultiDiscrete(np.zeros((P, 1, seq_len), dtype=int) + self.n_subtasks)
-        })
-
     @classmethod
     def get_entities(cls) -> List[str]:
         return cls._entities
@@ -540,7 +498,6 @@ class SequenceContinuousObs(SequenceObs):
             self,
             board_dims: Tuple[int, int] = MAX_BOARD_SIZE
     ) -> gym.spaces.Dict:
-        subtask_encoding = super(SequenceContinuousObs, self).get_obs_spec(board_dims)
         seq_len = board_dims[0] * board_dims[1]
         return gym.spaces.Dict({
             # One of: "", city_tile (me or opp), worker (me or opp), cart (me or opp), road, coal, wood, uranium
@@ -585,34 +542,15 @@ class SequenceContinuousObs(SequenceObs):
             ),
             # The number of turns
             "turn": gym.spaces.Box(0., 1., shape=(P, 1)),
-            **subtask_encoding.spaces
         })
 
-    def wrap_env(
-            self,
-            env,
-            subtask_reward_space: Optional[reward_spaces.Subtask] = None,
-            seq_len: int = MAX_BOARD_SIZE[0] * MAX_BOARD_SIZE[1]
-    ) -> gym.Wrapper:
-        return _SequenceEmbeddingObsWrapper(env, self.include_subtask_encoding, subtask_reward_space, seq_len)
+    def wrap_env(self, env, seq_len: int = MAX_BOARD_SIZE[0] * MAX_BOARD_SIZE[1]) -> gym.Wrapper:
+        return _SequenceEmbeddingObsWrapper(env, seq_len)
 
 
 class _SequenceEmbeddingObsWrapper(gym.Wrapper):
-    def __init__(
-            self,
-            env: gym.Env,
-            include_subtask_encoding: bool,
-            subtask_reward_space: Optional[reward_spaces.Subtask],
-            seq_len: int
-    ):
+    def __init__(self, env: gym.Env, seq_len: int):
         super(_SequenceEmbeddingObsWrapper, self).__init__(env)
-        if include_subtask_encoding:
-            if subtask_reward_space is None:
-                raise ValueError("Cannot use subtask_encoding without providing subtask_reward_space.")
-            elif not isinstance(subtask_reward_space, reward_spaces.Subtask):
-                raise ValueError("Reward_space must be an instance of Subtask")
-        self.include_subtask_encoding = include_subtask_encoding
-        self.subtask_reward_space = subtask_reward_space
         self.seq_len = seq_len
         self._empty_obs = {}
         for key, spec in self.observation_space.spaces.items():
@@ -756,8 +694,5 @@ class _SequenceEmbeddingObsWrapper(gym.Wrapper):
             GAME_CONSTANTS["PARAMETERS"]["MAX_DAYS"] / DN_CYCLE_LEN - 1
         )
         obs["turn"][:, 0] = observation.turn / GAME_CONSTANTS["PARAMETERS"]["MAX_DAYS"]
-
-        if self.include_subtask_encoding:
-            obs["subtask"][:] = self.subtask_reward_space.get_subtask_encoding(SUBTASK_ENCODING)
 
         return obs, extra_info

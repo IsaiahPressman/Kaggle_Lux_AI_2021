@@ -1,3 +1,5 @@
+import sys
+
 import gym.spaces
 import numpy as np
 import torch
@@ -43,7 +45,8 @@ class ConvEmbeddingInputLayer(nn.Module):
             embedding_dim: int,
             n_merge_layers: int = 1,
             use_index_select: bool = True,
-            activation: Callable = nn.LeakyReLU
+            activation: Callable = nn.LeakyReLU,
+            obs_space_prefix: str = ""
     ):
         super(ConvEmbeddingInputLayer, self).__init__()
 
@@ -51,8 +54,13 @@ class ConvEmbeddingInputLayer(nn.Module):
         n_continuous_channels = 0
         n_embedding_channels = 0
         self.keys_to_op = {}
+        self.obs_space_prefix = obs_space_prefix
         for key, val in obs_space.spaces.items():
             assert val.shape[0] == 1
+            # Used for when performing inference with multiple models with different obs spaces on a single env
+            if self.obs_space_prefix and key.startswith(self.obs_space_prefix):
+                key = key[len(obs_space_prefix):]
+
             if key.endswith("_COUNT"):
                 if key[:-6] not in obs_space.spaces.keys():
                     raise ValueError(f"{key} was found in obs_space without an associated {key[:-6]}.")
@@ -125,7 +133,7 @@ class ConvEmbeddingInputLayer(nn.Module):
         embedding_outs = {}
         for key, op in self.keys_to_op.items():
             # Input should be of size (b, n, p|1, x, y) OR (b, n, p|1)
-            in_tensor = x[key]
+            in_tensor = x[self.obs_space_prefix + key]
             assert in_tensor.shape[2] <= 2
             # First we duplicate each batch entry and swap player axes when relevant
             in_tensor = in_tensor[

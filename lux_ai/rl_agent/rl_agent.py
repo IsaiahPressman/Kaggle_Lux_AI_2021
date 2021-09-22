@@ -55,7 +55,7 @@ class RLAgent:
         )
         reward_space = create_reward_space(self.model_flags)
         env = wrappers.RewardSpaceWrapper(env, reward_space)
-        env = env.obs_space.wrap_env(env, reward_space)
+        env = env.obs_space.wrap_env(env)
         env = wrappers.PadFixedShapeEnv(env)
         env = wrappers.VecEnv([env])
         # We'll move the data onto the target device necessary after preprocessing
