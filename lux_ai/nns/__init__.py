@@ -8,8 +8,6 @@ from .in_blocks import ConvEmbeddingInputLayer
 from .attn_blocks import ViTBlock, RPSA, GPSA
 from .conv_blocks import ResidualBlock, ParallelDilationResidualBlock
 from .unet import UNET
-from ..lux_gym.obs_spaces import SUBTASK_ENCODING
-from ..lux_gym.multi_subtask import MultiSubtask
 from ..utility_constants import MAX_BOARD_SIZE
 
 
@@ -122,17 +120,12 @@ def create_model(flags, device: torch.device) -> nn.Module:
     else:
         raise NotImplementedError(f"Model_arch: {flags.model_arch}")
 
-    if flags.reward_space is MultiSubtask:
-        n_value_heads = len(SUBTASK_ENCODING)
-    else:
-        n_value_heads = 1
-
     model = BasicActorCriticNetwork(
         base_model=base_model,
         base_out_channels=flags.hidden_dim,
         action_space=act_space.get_action_space(),
         reward_space=flags.reward_space.get_reward_spec(),
-        n_value_heads=n_value_heads,
+        n_value_heads=1,
         rescale_value_input=flags.rescale_value_input
     )
     return model.to(device=device)

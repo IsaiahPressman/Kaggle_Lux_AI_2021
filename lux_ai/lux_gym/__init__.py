@@ -43,7 +43,7 @@ def create_env(flags, device: torch.device, seed: Optional[int] = None) -> DictE
         )
         reward_space = create_reward_space(flags)
         env = RewardSpaceWrapper(env, reward_space)
-        env = env.obs_space.wrap_env(env, reward_space)
+        env = env.obs_space.wrap_env(env)
         env = PadFixedShapeEnv(env)
         env = LoggingEnv(env, reward_space)
         envs.append(env)
