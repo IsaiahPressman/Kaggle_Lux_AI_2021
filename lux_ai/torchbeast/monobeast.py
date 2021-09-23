@@ -172,12 +172,13 @@ def compute_policy_gradient_loss(
 
 @torch.no_grad()
 def act(
-    flags: SimpleNamespace,
-    actor_index: int,
-    free_queue: mp.SimpleQueue,
-    full_queue: mp.SimpleQueue,
-    actor_model: torch.nn.Module,
-    buffers: Buffers,
+        flags: SimpleNamespace,
+        teacher_flags: Optional[SimpleNamespace],
+        actor_index: int,
+        free_queue: mp.SimpleQueue,
+        full_queue: mp.SimpleQueue,
+        actor_model: torch.nn.Module,
+        buffers: Buffers,
 ):
     if flags.debug:
         catch_me = AssertionError
@@ -187,7 +188,7 @@ def act(
         logging.info("Actor %i started.", actor_index)
         timings = prof.Timings()
 
-        env = create_env(flags, device=flags.actor_device)
+        env = create_env(flags, device=flags.actor_device, teacher_flags=teacher_flags)
         if flags.seed is not None:
             env.seed(flags.seed + actor_index * flags.n_actor_envs)
         else:
@@ -531,7 +532,13 @@ def train(flags):
     t = flags.unroll_length
     b = flags.batch_size
 
-    example_info = create_env(flags, torch.device("cpu")).reset(force=True)["info"]
+    if flags.use_teacher:
+        teacher_flags = OmegaConf.load(Path(flags.teacher_load_dir) / "config.yaml")
+        teacher_flags = flags_to_namespace(OmegaConf.to_container(teacher_flags))
+    else:
+        teacher_flags = None
+
+    example_info = create_env(flags, torch.device("cpu"), teacher_flags=teacher_flags).reset(force=True)["info"]
     buffers = create_buffers(flags, example_info)
 
     if flags.load_dir:
@@ -539,7 +546,7 @@ def train(flags):
     else:
         checkpoint_state = None
 
-    actor_model = create_model(flags, flags.actor_device)
+    actor_model = create_model(flags, flags.actor_device, teacher_flags=teacher_flags, is_teacher_model=False)
     if checkpoint_state is not None:
         actor_model.load_state_dict(checkpoint_state["model_state_dict"])
     actor_model.eval()
@@ -568,7 +575,7 @@ def train(flags):
         actor_processes.append(actor)
         time.sleep(0.5)
 
-    learner_model = create_model(flags, flags.learner_device)
+    learner_model = create_model(flags, flags.learner_device, teacher_flags=teacher_flags, is_teacher_model=False)
     if checkpoint_state is not None:
         learner_model.load_state_dict(checkpoint_state["model_state_dict"])
     learner_model.train()
@@ -588,9 +595,12 @@ def train(flags):
         if flags.teacher_kl_cost <= 0. and flags.teacher_baseline_cost <= 0.:
             raise ValueError("It does not make sense to use teacher when teacher_kl_cost <= 0 "
                              "and teacher_baseline_cost <= 0")
-        teacher_flags = OmegaConf.load(Path(flags.teacher_load_dir) / "config.yaml")
-        teacher_flags = flags_to_namespace(OmegaConf.to_container(teacher_flags))
-        teacher_model = create_model(teacher_flags, flags.learner_device)
+        teacher_model = create_model(
+            teacher_flags,
+            flags.learner_device,
+            teacher_flags=teacher_flags,
+            is_teacher_model=True
+        )
         teacher_model.load_state_dict(
             torch.load(
                 Path(flags.teacher_load_dir) / flags.teacher_checkpoint_file,

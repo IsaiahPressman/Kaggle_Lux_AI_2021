@@ -53,8 +53,28 @@ class MultiObs(BaseObsSpace):
         })
 
     def wrap_env(self, env) -> gym.Wrapper:
-        pass
-        # TODO
+        return _MultiObsWrapper(env, self.named_obs_spaces)
+
+
+class _MultiObsWrapper(gym.Wrapper):
+    def __init__(self, env, named_obs_spaces: Dict[str, BaseObsSpace]):
+        super(_MultiObsWrapper, self).__init__(env)
+        self.named_obs_space_wrappers = {key: val.wrap_env(env) for key, val in named_obs_spaces}
+
+    def reset(self, **kwargs):
+        observation, reward, done, info = self.env.reset(**kwargs)
+        return self.observation(observation), reward, done, info
+
+    def step(self, action):
+        observation, reward, done, info = self.env.step(action)
+        return self.observation(observation), reward, done, info
+
+    def observation(self, observation: Game) -> Dict[str, np.ndarray]:
+        return {
+            name + key: val
+            for name, obs_space in self.named_obs_space_wrappers.items()
+            for key, val in obs_space.observation(observation)
+        }
 
 
 class FixedShapeContinuousObs(FixedShapeObs):
@@ -131,10 +151,7 @@ class FixedShapeContinuousObs(FixedShapeObs):
 
 
 class _FixedShapeContinuousObsWrapper(gym.Wrapper):
-    def __init__(
-            self,
-            env: gym.Env,
-    ):
+    def __init__(self, env: gym.Env):
         super(_FixedShapeContinuousObsWrapper, self).__init__(env)
         self._empty_obs = {}
         for key, spec in self.observation_space.spaces.items():

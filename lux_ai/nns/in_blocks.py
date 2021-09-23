@@ -57,9 +57,12 @@ class ConvEmbeddingInputLayer(nn.Module):
         self.obs_space_prefix = obs_space_prefix
         for key, val in obs_space.spaces.items():
             assert val.shape[0] == 1
-            # Used for when performing inference with multiple models with different obs spaces on a single env
-            if self.obs_space_prefix and key.startswith(self.obs_space_prefix):
-                key = key[len(obs_space_prefix):]
+            # Used when performing inference with multiple models with different obs spaces on a single MultiObs env
+            if self.obs_space_prefix:
+                if key.startswith(self.obs_space_prefix):
+                    key = key[len(obs_space_prefix):]
+                else:
+                    continue
 
             if key.endswith("_COUNT"):
                 if key[:-6] not in obs_space.spaces.keys():
