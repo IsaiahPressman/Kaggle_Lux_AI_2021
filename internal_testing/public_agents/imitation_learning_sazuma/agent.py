@@ -4,7 +4,8 @@ import torch
 from lux.game import Game
 
 
-path = '/kaggle_simulations/agent' if os.path.exists('/kaggle_simulations') else '.'
+local_path = '/home/isaiah/GitHub/Kaggle/Lux_AI_2021/internal_testing/public_agents/imitation_learning_sazuma/'
+path = '/kaggle_simulations/agent' if os.path.exists('/kaggle_simulations') else local_path
 model = torch.jit.load(f'{path}/model.pth')
 model.eval()
 
