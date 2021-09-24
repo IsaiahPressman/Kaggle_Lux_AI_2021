@@ -5,6 +5,7 @@ import torch
 from typing import Any, Callable, Dict, List, Tuple, Union
 
 from ...lux_gym.act_spaces import MAX_OVERLAPPING_ACTIONS
+from ...lux_gym.obs_spaces import BaseObsSpace
 
 Buffers = List[Dict[str, Union[Dict, torch.Tensor]]]
 
@@ -79,12 +80,16 @@ def _create_buffers_like(buffers: Union[Dict, torch.Tensor], t_dim: int) -> Unio
         return torch.empty_like(buffers).share_memory_()
 
 
-def create_buffers(flags, example_info: Dict[str, Union[Dict, np.ndarray, torch.Tensor]]) -> Buffers:
+def create_buffers(
+        flags,
+        obs_space: BaseObsSpace,
+        example_info: Dict[str, Union[Dict, np.ndarray, torch.Tensor]]
+) -> Buffers:
     t = flags.unroll_length
     n = flags.n_actor_envs
     p = 2
     obs_specs = {}
-    for key, spec in flags.obs_space(**flags.obs_space_kwargs).get_obs_spec().spaces.items():
+    for key, spec in obs_space.get_obs_spec().spaces.items():
         if isinstance(spec, gym.spaces.MultiBinary):
             dtype = torch.int64
         elif isinstance(spec, gym.spaces.MultiDiscrete):

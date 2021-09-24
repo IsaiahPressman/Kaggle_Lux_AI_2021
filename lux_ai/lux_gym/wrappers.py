@@ -18,7 +18,7 @@ class PadFixedShapeEnv(gym.Wrapper):
         self.input_mask = np.zeros((1,) + max_board_size, dtype=bool)
         self.input_mask[:, :self.orig_board_dims[0], :self.orig_board_dims[1]] = True
 
-    def _pad(self, x: Union[dict, np.ndarray]) -> Union[dict, np.ndarray]:
+    def _pad(self, x: Union[Dict, np.ndarray]) -> Union[dict, np.ndarray]:
         if isinstance(x, dict):
             return {key: self._pad(val) for key, val in x.items()}
         elif x.ndim == 4 and x.shape[2:4] == self.orig_board_dims:
