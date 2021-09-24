@@ -1,4 +1,5 @@
 import os
+import time
 import pickle
 
 import numpy as np
@@ -19,7 +20,8 @@ def game_logic(game_state: Game, missions: Missions, DEBUG=False):
     if DEBUG: print = __builtin__.print
     else: print = lambda *args: None
 
-    actions_by_cities = make_city_actions(game_state, DEBUG=DEBUG)
+    game_state.calculate_features(missions)
+    actions_by_cities = make_city_actions(game_state, missions, DEBUG=DEBUG)
     missions = make_unit_missions(game_state, missions, DEBUG=DEBUG)
     mission_annotations = print_and_annotate_missions(game_state, missions)
     missions, actions_by_units = make_unit_actions(game_state, missions, DEBUG=DEBUG)
@@ -70,10 +72,12 @@ def print_and_annotate_missions(game_state: Game, missions: Missions, DEBUG=Fals
             annotation = annotate.x(mission.target_position.x, mission.target_position.y)
             annotations.append(annotation)
 
-    annotation = annotate.sidetext("U:{} C:{} L:{}/{}".format(len(game_state.player.units),
-                                                              len(game_state.player_city_tile_xy_set),
-                                                              len(game_state.targeted_leaders),
-                                                              game_state.xy_to_resource_group_id.get_group_count()))
+    annotation = annotate.sidetext("U:{} C:{} L:{}/{} T:{:.3f}".format(
+        len(game_state.player.units),
+        len(game_state.player_city_tile_xy_set),
+        game_state.targeted_cluster_count,
+        game_state.xy_to_resource_group_id.get_group_count(),
+        time.time() - game_state.compute_start_time))
     annotations.append(annotation)
 
     return annotations
@@ -81,14 +85,8 @@ def print_and_annotate_missions(game_state: Game, missions: Missions, DEBUG=Fals
 
 def annotate_movements(game_state: Game, actions_by_units: List[str]):
     annotations = []
-    dirs = [
-        DIRECTIONS.NORTH,
-        DIRECTIONS.EAST,
-        DIRECTIONS.SOUTH,
-        DIRECTIONS.WEST,
-        DIRECTIONS.CENTER
-    ]
-    d5 = [(0,-1), (1,0), (0,1), (-1,0), (0,0)]
+    dirs = game_state.dirs
+    d5 = game_state.dirs_dxdy
 
     for action_by_units in actions_by_units:
         if action_by_units[:2] != "m ":
@@ -115,21 +113,22 @@ def agent(observation, configuration, DEBUG=False):
         game_state._initialize(observation["updates"])
         game_state.player_id = observation.player
         game_state._update(observation["updates"][2:])
+        game_state.fix_iteration_order()
     else:
         # actually rebuilt and recomputed from scratch
         game_state._update(observation["updates"])
 
-    # Don't save snapshots
-    """
     if not os.environ.get('GFOOTBALL_DATA_DIR', ''):  # on Kaggle compete, do not save items
         str_step = str(observation["step"]).zfill(3)
-        with open('snapshots/observation-{}.pkl'.format(str_step), 'wb') as handle:
+        """
+        with open('snapshots/observation-{}-{}.pkl'.format(str_step, game_state.player_id), 'wb') as handle:
             pickle.dump(observation, handle, protocol=pickle.HIGHEST_PROTOCOL)
-        with open('snapshots/game_state-{}.pkl'.format(str_step), 'wb') as handle:
+        with open('snapshots/game_state-{}-{}.pkl'.format(str_step, game_state.player_id), 'wb') as handle:
             pickle.dump(game_state, handle, protocol=pickle.HIGHEST_PROTOCOL)
-        with open('snapshots/missions-{}.pkl'.format(str_step), 'wb') as handle:
+        with open('snapshots/missions-{}-{}.pkl'.format(str_step, game_state.player_id), 'wb') as handle:
             pickle.dump(missions, handle, protocol=pickle.HIGHEST_PROTOCOL)
-    """
+        """
 
+    game_state.compute_start_time = time.time()
     actions, game_state, missions = game_logic(game_state, missions)
     return actions
