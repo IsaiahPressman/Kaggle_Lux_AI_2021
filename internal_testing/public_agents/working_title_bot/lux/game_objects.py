@@ -185,3 +185,6 @@ class Unit:
             if self.night_turn_survivable > night_length:
                 travel_range = day_length // cooldown_required + self.night_travel_range
             self.travel_range = travel_range
+
+    def encode_tuple_for_cmp(self):
+        return (self.cooldown, self.cargo.wood, self.cargo.coal, self.cargo.uranium, self.is_worker())

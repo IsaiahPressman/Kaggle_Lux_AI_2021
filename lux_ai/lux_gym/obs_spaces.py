@@ -424,7 +424,7 @@ class _FixedShapeContinuousObsWrapperV2(gym.Wrapper):
     @staticmethod
     @functools.lru_cache(maxsize=None)
     def get_dist_from_center_y(map_height: int, map_width: int) -> np.ndarray:
-        pos = np.linspace(0, 1, map_height)[:, None].repeat(map_width, axis=1)
+        pos = np.linspace(0, 2, map_height)[:, None].repeat(map_width, axis=1)
         return np.abs(1 - pos)[None, None, :, :]
 
 
