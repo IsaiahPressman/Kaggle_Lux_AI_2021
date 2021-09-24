@@ -136,7 +136,7 @@ class FixedShapeContinuousObs(FixedShapeObs):
             # uranium is researched
             "researched_uranium": gym.spaces.MultiBinary((1, P)),
             # True when it is night
-            "night": gym.spaces.MultiBinary((1, 1)),
+            "night": gym.spaces.MultiDiscrete(np.zeros((1, 1)) + 2),
             # The turn number % 40
             "day_night_cycle": gym.spaces.Box(0., 1., shape=(1, 1)),
             # The turn number // 40
@@ -303,7 +303,7 @@ class FixedShapeContinuousObsV2(FixedShapeObs):
             # uranium is researched
             "researched_uranium": gym.spaces.MultiBinary((1, P)),
             # True when it is night
-            "night": gym.spaces.MultiBinary((1, 1)),
+            "night": gym.spaces.MultiDiscrete(np.zeros((1, 1)) + 2),
             # The turn number % 40
             "day_night_cycle": gym.spaces.MultiDiscrete(np.zeros((1, 1)) + DN_CYCLE_LEN),
             # The turn number // 40
@@ -498,7 +498,7 @@ class FixedShapeEmbeddingObs(FixedShapeObs):
             # uranium is researched
             "researched_uranium": gym.spaces.MultiBinary((1, P)),
             # True when it is night
-            "night": gym.spaces.MultiBinary((1, 1)),
+            "night": gym.spaces.MultiDiscrete(np.zeros((1, 1)) + 2),
             # The turn number % 40
             "day_night_cycle": gym.spaces.MultiDiscrete(np.zeros((1, 1)) + DN_CYCLE_LEN),
             # The turn number // 40
@@ -736,7 +736,7 @@ class SequenceContinuousObs(SequenceObs):
             # uranium is researched
             "researched_uranium": gym.spaces.MultiBinary((P, P)),
             # True when it is night
-            "night": gym.spaces.MultiBinary((P, 1)),
+            "night": gym.spaces.MultiDiscrete(np.zeros((P, 1)) + 2),
             # The turn number % 40
             "day_night_cycle": gym.spaces.MultiDiscrete(np.zeros((P, 1)) + DN_CYCLE_LEN),
             # The turn number // 40
