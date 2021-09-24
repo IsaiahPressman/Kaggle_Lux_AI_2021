@@ -36,7 +36,7 @@ def create_flexible_obs_space(flags, teacher_flags: Optional) -> obs_spaces.Base
         # Train a student using a different observation space than the teacher
         return obs_spaces.MultiObs({
             "teacher_": teacher_flags.obs_space(**teacher_flags.obs_space_kwargs),
-            "main_": flags.obs_space(**flags.obs_space_kwargs)
+            "student_": flags.obs_space(**flags.obs_space_kwargs)
         })
     else:
         return flags.obs_space(**flags.obs_space_kwargs)

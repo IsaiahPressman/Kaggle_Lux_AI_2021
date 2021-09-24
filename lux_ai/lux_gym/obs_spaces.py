@@ -1,3 +1,4 @@
+import functools
 import logging
 from abc import ABC, abstractmethod
 import gym
@@ -5,7 +6,7 @@ import itertools
 import numpy as np
 from typing import Dict, List, Tuple
 
-from ..utility_constants import DN_CYCLE_LEN, MAX_RESOURCE, MAX_BOARD_SIZE
+from ..utility_constants import DN_CYCLE_LEN, MAX_RESOURCE, MAP_SIZES, MAX_BOARD_SIZE
 from ..lux.constants import Constants
 from ..lux.game import Game
 from ..lux.game_constants import GAME_CONSTANTS
@@ -49,7 +50,7 @@ class MultiObs(BaseObsSpace):
         return gym.spaces.Dict({
             name + key: val
             for name, obs_space in self.named_obs_spaces.items()
-            for key, val in obs_space.get_obs_spec().spaces.items()
+            for key, val in obs_space.get_obs_spec(board_dims).spaces.items()
         })
 
     def wrap_env(self, env) -> gym.Wrapper:
@@ -59,7 +60,7 @@ class MultiObs(BaseObsSpace):
 class _MultiObsWrapper(gym.Wrapper):
     def __init__(self, env, named_obs_spaces: Dict[str, BaseObsSpace]):
         super(_MultiObsWrapper, self).__init__(env)
-        self.named_obs_space_wrappers = {key: val.wrap_env(env) for key, val in named_obs_spaces}
+        self.named_obs_space_wrappers = {key: val.wrap_env(env) for key, val in named_obs_spaces.items()}
 
     def reset(self, **kwargs):
         observation, reward, done, info = self.env.reset(**kwargs)
@@ -73,7 +74,7 @@ class _MultiObsWrapper(gym.Wrapper):
         return {
             name + key: val
             for name, obs_space in self.named_obs_space_wrappers.items()
-            for key, val in obs_space.observation(observation)
+            for key, val in obs_space.observation(observation).items()
         }
 
 
@@ -154,7 +155,7 @@ class _FixedShapeContinuousObsWrapper(gym.Wrapper):
     def __init__(self, env: gym.Env):
         super(_FixedShapeContinuousObsWrapper, self).__init__(env)
         self._empty_obs = {}
-        for key, spec in self.observation_space.spaces.items():
+        for key, spec in FixedShapeContinuousObs().get_obs_spec().spaces.items():
             if isinstance(spec, gym.spaces.MultiBinary) or isinstance(spec, gym.spaces.MultiDiscrete):
                 self._empty_obs[key] = np.zeros(spec.shape, dtype=np.int64)
             elif isinstance(spec, gym.spaces.Box):
@@ -181,7 +182,177 @@ class _FixedShapeContinuousObsWrapper(gym.Wrapper):
         max_research = max(GAME_CONSTANTS["PARAMETERS"]["RESEARCH_REQUIREMENTS"].values())
 
         obs = {
-            key: val.copy() for key, val in self._empty_obs.items()
+            key: val.copy() if val.ndim == 2 else val[:, :, :observation.map_width, :observation.map_height].copy()
+            for key, val in self._empty_obs.items()
+        }
+
+        for player in observation.players:
+            p_id = player.team
+            for unit in player.units:
+                x, y = unit.pos.x, unit.pos.y
+                if unit.is_worker():
+                    obs["worker"][0, p_id, x, y] = 1
+                    obs["worker_COUNT"][0, p_id, x, y] += 1
+                    obs["worker_cooldown"][0, p_id, x, y] = unit.cooldown / w_cooldown
+                    obs["worker_cargo_full"][0, p_id, x, y] = unit.get_cargo_space_left() == 0
+
+                    obs[f"worker_cargo_{WOOD}"][0, p_id, x, y] = unit.cargo.wood / w_capacity
+                    obs[f"worker_cargo_{COAL}"][0, p_id, x, y] = unit.cargo.coal / w_capacity
+                    obs[f"worker_cargo_{URANIUM}"][0, p_id, x, y] = unit.cargo.uranium / w_capacity
+                elif unit.is_cart():
+                    obs["cart"][0, p_id, x, y] = 1
+                    obs["cart_COUNT"][0, p_id, x, y] += 1
+                    obs["cart_cooldown"][0, p_id, x, y] = unit.cooldown / ca_cooldown
+                    obs["cart_cargo_full"][0, p_id, x, y] = unit.get_cargo_space_left() == 0
+
+                    obs[f"cart_cargo_{WOOD}"][0, p_id, x, y] = unit.cargo.wood / ca_capacity
+                    obs[f"cart_cargo_{COAL}"][0, p_id, x, y] = unit.cargo.coal / ca_capacity
+                    obs[f"cart_cargo_{URANIUM}"][0, p_id, x, y] = unit.cargo.uranium / ca_capacity
+                else:
+                    raise NotImplementedError(f'New unit type: {unit}')
+
+            for city in player.cities.values():
+                city_fuel_normalized = city.fuel / MAX_FUEL / len(city.citytiles)
+                city_light_normalized = city.light_upkeep / ci_light / len(city.citytiles)
+                for city_tile in city.citytiles:
+                    x, y = city_tile.pos.x, city_tile.pos.y
+                    obs["city_tile"][0, p_id, x, y] = 1
+                    obs["city_tile_fuel"][0, p_id, x, y] = city_fuel_normalized
+                    # NB: This doesn't technically register the light upkeep of a given city tile, but instead
+                    # the average light cost of every tile in the given city
+                    obs["city_tile_cost"][0, p_id, x, y] = city_light_normalized
+                    obs["city_tile_cooldown"][0, p_id, x, y] = city_tile.cooldown / ci_cooldown
+
+            for cell in itertools.chain(*observation.map.map):
+                x, y = cell.pos.x, cell.pos.y
+                obs["road_level"][0, 0, x, y] = cell.road / max_road
+                if cell.has_resource():
+                    obs[f"{cell.resource.type}"][0, 0, x, y] = cell.resource.amount / MAX_RESOURCE[cell.resource.type]
+
+            obs["research_points"][0, p_id] = min(player.research_points / max_research, 1.)
+            obs["researched_coal"][0, p_id] = player.researched_coal()
+            obs["researched_uranium"][0, p_id] = player.researched_uranium()
+        obs["night"][0, 0] = observation.is_night
+        obs["day_night_cycle"][0, 0] = (observation.turn % DN_CYCLE_LEN) / DN_CYCLE_LEN
+        obs["phase"][0, 0] = min(
+            observation.turn // DN_CYCLE_LEN,
+            GAME_CONSTANTS["PARAMETERS"]["MAX_DAYS"] / DN_CYCLE_LEN - 1
+        )
+        obs["turn"][0, 0] = observation.turn / GAME_CONSTANTS["PARAMETERS"]["MAX_DAYS"]
+
+        return obs
+
+
+class FixedShapeContinuousObsV2(FixedShapeObs):
+    def get_obs_spec(
+            self,
+            board_dims: Tuple[int, int] = MAX_BOARD_SIZE
+    ) -> gym.spaces.Dict:
+        x = board_dims[0]
+        y = board_dims[1]
+        return gym.spaces.Dict({
+            # Player specific observations
+            # none, worker
+            "worker": gym.spaces.MultiBinary((1, P, x, y)),
+            # none, cart
+            "cart": gym.spaces.MultiBinary((1, P, x, y)),
+            # Number of units in the square (only relevant on city tiles)
+            "worker_COUNT": gym.spaces.Box(0., float("inf"), shape=(1, P, x, y)),
+            "cart_COUNT": gym.spaces.Box(0., float("inf"), shape=(1, P, x, y)),
+            # NB: cooldowns and cargo are always zero when on city tiles, so one layer will do for
+            # the entire map
+            # Normalized from 0-3
+            "worker_cooldown": gym.spaces.Box(0., 1., shape=(1, P, x, y)),
+            # Normalized from 0-5
+            "cart_cooldown": gym.spaces.Box(0., 1., shape=(1, P, x, y)),
+            # Normalized from 0-100
+            f"worker_cargo_{WOOD}": gym.spaces.Box(0., 1., shape=(1, P, x, y)),
+            f"worker_cargo_{COAL}": gym.spaces.Box(0., 1., shape=(1, P, x, y)),
+            f"worker_cargo_{URANIUM}": gym.spaces.Box(0., 1., shape=(1, P, x, y)),
+            # Normalized from 0-2000
+            f"cart_cargo_{WOOD}": gym.spaces.Box(0., 1., shape=(1, P, x, y)),
+            f"cart_cargo_{COAL}": gym.spaces.Box(0., 1., shape=(1, P, x, y)),
+            f"cart_cargo_{URANIUM}": gym.spaces.Box(0., 1., shape=(1, P, x, y)),
+            # Whether the worker/cart is full
+            "worker_cargo_full": gym.spaces.MultiBinary((1, P, x, y)),
+            "cart_cargo_full": gym.spaces.MultiBinary((1, P, x, y)),
+            # none, city_tile
+            "city_tile": gym.spaces.MultiBinary((1, P, x, y)),
+            # Normalized from 0-MAX_FUEL
+            "city_tile_fuel": gym.spaces.Box(0., 1., shape=(1, P, x, y)),
+            # Normalized from 0-CITY_LIGHT_UPKEEP
+            "city_tile_cost": gym.spaces.Box(0., 1., shape=(1, P, x, y)),
+            # Normalized from 0-9
+            "city_tile_cooldown": gym.spaces.Box(0., 1., shape=(1, P, x, y)),
+
+            # Player-agnostic observations
+            # Normalized from 0-6
+            "road_level": gym.spaces.Box(0., 1., shape=(1, 1, x, y)),
+            # Resources
+            f"{WOOD}": gym.spaces.Box(0., 1., shape=(1, 1, x, y)),
+            f"{COAL}": gym.spaces.Box(0., 1., shape=(1, 1, x, y)),
+            f"{URANIUM}": gym.spaces.Box(0., 1., shape=(1, 1, x, y)),
+            "dist_from_center_x": gym.spaces.Box(0., 1., shape=(1, 1, x, y)),
+            "dist_from_center_y": gym.spaces.Box(0., 1., shape=(1, 1, x, y)),
+
+            # Non-spatial observations
+            # Normalized from 0-200
+            "research_points": gym.spaces.Box(0., 1., shape=(1, P)),
+            # coal is researched
+            "researched_coal": gym.spaces.MultiBinary((1, P)),
+            # uranium is researched
+            "researched_uranium": gym.spaces.MultiBinary((1, P)),
+            # True when it is night
+            "night": gym.spaces.MultiBinary((1, 1)),
+            # The turn number % 40
+            "day_night_cycle": gym.spaces.MultiDiscrete(np.zeros((1, 1)) + DN_CYCLE_LEN),
+            # The turn number // 40
+            "phase": gym.spaces.MultiDiscrete(
+                np.zeros((1, 1)) + GAME_CONSTANTS["PARAMETERS"]["MAX_DAYS"] / DN_CYCLE_LEN
+            ),
+            # The turn number, normalized from 0-360
+            "turn": gym.spaces.Box(0., 1., shape=(1, 1)),
+            # 12, 16, 24, or 32
+            "board_size": gym.spaces.MultiDiscrete(np.zeros((1, 1)) + len(MAP_SIZES)),
+        })
+
+    def wrap_env(self, env) -> gym.Wrapper:
+        return _FixedShapeContinuousObsWrapperV2(env)
+
+
+class _FixedShapeContinuousObsWrapperV2(gym.Wrapper):
+    def __init__(self, env: gym.Env):
+        super(_FixedShapeContinuousObsWrapperV2, self).__init__(env)
+        self._empty_obs = {}
+        for key, spec in FixedShapeContinuousObsV2().get_obs_spec().spaces.items():
+            if isinstance(spec, gym.spaces.MultiBinary) or isinstance(spec, gym.spaces.MultiDiscrete):
+                self._empty_obs[key] = np.zeros(spec.shape, dtype=np.int64)
+            elif isinstance(spec, gym.spaces.Box):
+                self._empty_obs[key] = np.zeros(spec.shape, dtype=np.float32) + spec.low
+            else:
+                raise NotImplementedError(f"{type(spec)} is not an accepted observation space.")
+
+    def reset(self, **kwargs):
+        observation, reward, done, info = self.env.reset(**kwargs)
+        return self.observation(observation), reward, done, info
+
+    def step(self, action):
+        observation, reward, done, info = self.env.step(action)
+        return self.observation(observation), reward, done, info
+
+    def observation(self, observation: Game) -> Dict[str, np.ndarray]:
+        w_capacity = GAME_CONSTANTS["PARAMETERS"]["RESOURCE_CAPACITY"]["WORKER"]
+        ca_capacity = GAME_CONSTANTS["PARAMETERS"]["RESOURCE_CAPACITY"]["CART"]
+        w_cooldown = GAME_CONSTANTS["PARAMETERS"]["UNIT_ACTION_COOLDOWN"]["WORKER"] * 2. - 1.
+        ca_cooldown = GAME_CONSTANTS["PARAMETERS"]["UNIT_ACTION_COOLDOWN"]["CART"] * 2. - 1.
+        ci_light = GAME_CONSTANTS["PARAMETERS"]["LIGHT_UPKEEP"]["CITY"]
+        ci_cooldown = GAME_CONSTANTS["PARAMETERS"]["CITY_ACTION_COOLDOWN"]
+        max_road = GAME_CONSTANTS["PARAMETERS"]["MAX_ROAD"]
+        max_research = max(GAME_CONSTANTS["PARAMETERS"]["RESEARCH_REQUIREMENTS"].values())
+
+        obs = {
+            key: val.copy() if val.ndim == 2 else val[:, :, :observation.map_width, :observation.map_height].copy()
+            for key, val in self._empty_obs.items()
         }
 
         for player in observation.players:
@@ -231,15 +402,30 @@ class _FixedShapeContinuousObsWrapper(gym.Wrapper):
             obs["research_points"][0, p_id] = min(player.research_points / max_research, 1.)
             obs["researched_coal"][0, p_id] = player.researched_coal()
             obs["researched_uranium"][0, p_id] = player.researched_uranium()
+        obs["dist_from_center_x"][:] = self.get_dist_from_center_x(observation.map_width, observation.map_height)
+        obs["dist_from_center_y"][:] = self.get_dist_from_center_y(observation.map_width, observation.map_height)
         obs["night"][0, 0] = observation.is_night
-        obs["day_night_cycle"][0, 0] = (observation.turn % DN_CYCLE_LEN) / DN_CYCLE_LEN
+        obs["day_night_cycle"][0, 0] = observation.turn % DN_CYCLE_LEN
         obs["phase"][0, 0] = min(
             observation.turn // DN_CYCLE_LEN,
             GAME_CONSTANTS["PARAMETERS"]["MAX_DAYS"] / DN_CYCLE_LEN - 1
         )
         obs["turn"][0, 0] = observation.turn / GAME_CONSTANTS["PARAMETERS"]["MAX_DAYS"]
+        obs["board_size"][0, 0] = MAP_SIZES.index((observation.map_width, observation.map_height))
 
         return obs
+
+    @staticmethod
+    @functools.lru_cache(maxsize=None)
+    def get_dist_from_center_x(map_height: int, map_width: int) -> np.ndarray:
+        pos = np.linspace(0, 2, map_width, dtype=np.float32)[None, :].repeat(map_height, axis=0)
+        return np.abs(1 - pos)[None, None, :, :]
+
+    @staticmethod
+    @functools.lru_cache(maxsize=None)
+    def get_dist_from_center_y(map_height: int, map_width: int) -> np.ndarray:
+        pos = np.linspace(0, 1, map_height)[:, None].repeat(map_width, axis=1)
+        return np.abs(1 - pos)[None, None, :, :]
 
 
 class FixedShapeEmbeddingObs(FixedShapeObs):

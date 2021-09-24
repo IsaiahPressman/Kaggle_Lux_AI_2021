@@ -15,10 +15,10 @@ from ..utility_constants import MAX_BOARD_SIZE
 def create_model(
         flags,
         device: torch.device,
-        teacher_flags: Optional = None,
+        teacher_model_flags: Optional = None,
         is_teacher_model: bool = False
 ) -> nn.Module:
-    obs_space = create_flexible_obs_space(flags, teacher_flags)
+    obs_space = create_flexible_obs_space(flags, teacher_model_flags)
     if isinstance(obs_space, obs_spaces.MultiObs):
         if is_teacher_model:
             obs_space_prefix = "teacher_"
@@ -27,11 +27,26 @@ def create_model(
         assert obs_space_prefix in obs_space.named_obs_spaces, f"{obs_space_prefix} not in {obs_space.named_obs_spaces}"
     else:
         obs_space_prefix = ""
-    act_space = flags.act_space()
 
+    return _create_model(
+        teacher_model_flags if is_teacher_model else flags,
+        device,
+        obs_space,
+        obs_space_prefix
+    )
+
+
+def _create_model(
+        flags,
+        device: torch.device,
+        obs_space: obs_spaces.BaseObsSpace,
+        obs_space_prefix: str
+):
+    act_space = flags.act_space()
     conv_embedding_input_layer = ConvEmbeddingInputLayer(
         obs_space=obs_space.get_obs_spec(),
-        embedding_dim=flags.hidden_dim,
+        embedding_dim=flags.embedding_dim,
+        out_dim=flags.hidden_dim,
         n_merge_layers=flags.n_merge_layers,
         use_index_select=flags.use_index_select,
         obs_space_prefix=obs_space_prefix

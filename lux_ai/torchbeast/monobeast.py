@@ -538,15 +538,20 @@ def train(flags):
     else:
         teacher_flags = None
 
-    example_info = create_env(flags, torch.device("cpu"), teacher_flags=teacher_flags).reset(force=True)["info"]
-    buffers = create_buffers(flags, example_info)
+    example_env = create_env(flags, torch.device("cpu"), teacher_flags=teacher_flags)
+    buffers = create_buffers(
+        flags,
+        example_env.unwrapped[0].obs_space,
+        example_env.reset(force=True)["info"]
+    )
+    del example_env
 
     if flags.load_dir:
         checkpoint_state = torch.load(Path(flags.load_dir) / flags.checkpoint_file, map_location=torch.device("cpu"))
     else:
         checkpoint_state = None
 
-    actor_model = create_model(flags, flags.actor_device, teacher_flags=teacher_flags, is_teacher_model=False)
+    actor_model = create_model(flags, flags.actor_device, teacher_model_flags=teacher_flags, is_teacher_model=False)
     if checkpoint_state is not None:
         actor_model.load_state_dict(checkpoint_state["model_state_dict"])
     actor_model.eval()
@@ -564,6 +569,7 @@ def train(flags):
             target=act,
             args=(
                 flags,
+                teacher_flags,
                 i,
                 free_queue,
                 full_queue,
@@ -575,7 +581,7 @@ def train(flags):
         actor_processes.append(actor)
         time.sleep(0.5)
 
-    learner_model = create_model(flags, flags.learner_device, teacher_flags=teacher_flags, is_teacher_model=False)
+    learner_model = create_model(flags, flags.learner_device, teacher_model_flags=teacher_flags, is_teacher_model=False)
     if checkpoint_state is not None:
         learner_model.load_state_dict(checkpoint_state["model_state_dict"])
     learner_model.train()
@@ -596,9 +602,9 @@ def train(flags):
             raise ValueError("It does not make sense to use teacher when teacher_kl_cost <= 0 "
                              "and teacher_baseline_cost <= 0")
         teacher_model = create_model(
-            teacher_flags,
+            flags,
             flags.learner_device,
-            teacher_flags=teacher_flags,
+            teacher_model_flags=teacher_flags,
             is_teacher_model=True
         )
         teacher_model.load_state_dict(
