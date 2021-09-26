@@ -68,17 +68,20 @@ def main(
     os.environ["CUDA_VISIBLE_DEVICES"] = cuda_visible_devices
 
     n_games_per_map = n_games // len(MAP_SIZES)
-    game_commands = [
-        generate_game_command(
-            agent_1=str(agent_1),
-            agent_2=str(agent_2),
-            game_name=f"{map_size}_{str(i).zfill(int(math.log10(n_games_per_map + 1)))}",
-            map_size=map_size,
-            out_dir=out_dir,
-        )
-        for i in range(n_games // len(MAP_SIZES))
-        for map_size in MAP_SIZES
-    ]
+    game_commands = []
+    for i in range(n_games // len(MAP_SIZES)):
+        if i % 2 == 0:
+            a1, a2 = agent_1, agent_2
+        else:
+            a1, a2 = agent_2, agent_1
+        for map_size in MAP_SIZES:
+            game_commands.append(generate_game_command(
+                agent_1=str(a1),
+                agent_2=str(a2),
+                game_name=f"{map_size}_{str(i).zfill(int(math.log10(n_games_per_map + 1)))}",
+                map_size=map_size,
+                out_dir=out_dir,
+            ))
 
     with mp.Pool(processes=n_workers) as pool:
         _ = list(tqdm.tqdm(pool.imap(run_game, game_commands), total=len(game_commands)))
