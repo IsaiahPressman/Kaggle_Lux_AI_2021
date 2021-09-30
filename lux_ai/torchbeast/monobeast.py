@@ -50,7 +50,7 @@ logging.basicConfig(
 )
 
 
-def combine_policy_logits_to_log_probs(
+def DEPRECATED_combine_policy_logits_to_log_probs(
         behavior_policy_logits: torch.Tensor,
         actions: torch.Tensor,
         actions_taken_mask: torch.Tensor
@@ -58,8 +58,8 @@ def combine_policy_logits_to_log_probs(
     """
     Combines all policy_logits at a given step to get a single action_log_probs value for that step
 
-    Initial shape: time, batch, 1, players, x, y
-    Returned shape: time, batch, players
+    Initial shape: time, batch, 1, players, x, y, logits_dim
+    Returned shape: time, batch, players, logits_dim
     """
     # DEPRECATED incorrect (but effective?) way of doing things:
     """
@@ -98,6 +98,51 @@ def combine_policy_logits_to_log_probs(
     return torch.flatten(log_probs, start_dim=-2, end_dim=-1).sum(dim=-1).squeeze(dim=-2)
 
 
+def combine_policy_logits_to_log_probs(
+        behavior_policy_logits: torch.Tensor,
+        actions: torch.Tensor,
+        actions_taken_mask: torch.Tensor
+) -> torch.Tensor:
+    """
+    Combines all policy_logits at a given step to get a single action_log_probs value for that step
+
+    Initial shape: time, batch, 1, players, x, y, n_actions
+    Returned shape: time, batch, players
+    """
+    # Get the action probabilities
+    probs = F.softmax(behavior_policy_logits, dim=-1)
+    # Ignore probabilities for actions that were not used
+    probs = actions_taken_mask * probs
+    # Select the probabilities for actions that were taken by stacked agents and sum these
+    selected_probs = torch.gather(probs, -1, actions)
+    # Convert the probs to conditional probs, since we sample without replacement
+    remaining_probability_density = 1. - torch.cat([
+        torch.zeros(
+            (*selected_probs.shape[:-1], 1),
+            device=selected_probs.device,
+            dtype=selected_probs.dtype
+        ),
+        selected_probs[..., :-1].cumsum(dim=-1)
+    ], dim=-1)
+    # Avoid division by zero
+    remaining_probability_density = remaining_probability_density + torch.where(
+        remaining_probability_density == 0,
+        torch.ones_like(remaining_probability_density),
+        torch.zeros_like(remaining_probability_density)
+    )
+    conditional_selected_probs = selected_probs / remaining_probability_density
+    # Remove 0-valued conditional_selected_probs in order to eliminate neg-inf valued log_probs
+    conditional_selected_probs = conditional_selected_probs + torch.where(
+        conditional_selected_probs == 0,
+        torch.ones_like(conditional_selected_probs),
+        torch.zeros_like(conditional_selected_probs)
+    )
+    log_probs = torch.log(conditional_selected_probs)
+    # Sum over actions, y and x dimensions to combine log_probs from different actions
+    # Squeeze out action_planes dimension as well
+    return torch.flatten(log_probs, start_dim=-3, end_dim=-1).sum(dim=-1).squeeze(dim=-2)
+
+
 def combine_policy_entropy(
         policy_logits: torch.Tensor,
         actions_taken_mask: torch.Tensor
@@ -107,7 +152,7 @@ def combine_policy_entropy(
     NB: We are just computing the sum of individual entropies, not the joint entropy, because I don't think there is
     an efficient way to compute the joint entropy?
 
-    Initial shape: time, batch, action_planes, players, x, y
+    Initial shape: time, batch, action_planes, players, x, y, n_actions
     Returned shape: time, batch, players
     """
     policy = F.softmax(policy_logits, dim=-1)
@@ -628,7 +673,7 @@ def train(flags):
     def lr_lambda(epoch):
         min_pct = flags.min_lr_mod
         pct_complete = min(epoch * t * b, flags.total_steps) / flags.total_steps
-        scaled_pct_complete = pct_complete * (1. - min_pct) + min_pct
+        scaled_pct_complete = pct_complete * (1. - min_pct)
         return 1. - scaled_pct_complete
 
     grad_scaler = amp.GradScaler()
