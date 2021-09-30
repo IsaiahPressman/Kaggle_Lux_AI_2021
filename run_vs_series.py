@@ -78,7 +78,7 @@ def main(
             game_commands.append(generate_game_command(
                 agent_1=str(a1),
                 agent_2=str(a2),
-                game_name=f"{map_size}_{str(i).zfill(int(math.log10(n_games_per_map + 1)))}",
+                game_name=f"{str(i).zfill(int(math.log10(n_games_per_map) + 1))}_{map_size}",
                 map_size=map_size,
                 out_dir=out_dir,
             ))
