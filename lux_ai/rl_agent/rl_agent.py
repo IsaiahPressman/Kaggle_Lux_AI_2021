@@ -118,7 +118,11 @@ class RLAgent:
                 "baseline": agent_output_augmented["baseline"].mean(dim=0, keepdim=True).cpu()
             }
             agent_output["actions"] = {
-                key: models.DictActor.logits_to_actions(val, sample=False, actions_per_square=None)
+                key: models.DictActor.logits_to_actions(
+                    torch.flatten(val, start_dim=0, end_dim=-2),
+                    sample=False,
+                    actions_per_square=None
+                ).view(*val.shape[:-1], -1)
                 for key, val in agent_output["policy_logits"].items()
             }
         # Used for debugging and visualization
