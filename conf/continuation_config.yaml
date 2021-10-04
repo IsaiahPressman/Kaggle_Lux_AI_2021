@@ -17,9 +17,8 @@ group: after_september_patch
 
 ## ENV params
 act_space: BasicActionSpace
-obs_space: FixedShapeContinuousObs
-obs_space_kwargs:
-  include_subtask_encoding: False
+obs_space: FixedShapeContinuousObsV2
+obs_space_kwargs: {}
 reward_space: GameResultReward
 reward_space_kwargs: {}
 
@@ -35,11 +34,12 @@ discounting: 0.999
 model_arch: conv_model
 n_blocks: 24
 hidden_dim: 128
+embedding_dim: 32
 n_merge_layers: 1
 normalize: False
-use_index_select: True
+use_index_select: False
 rescale_value_input: True
-rescale_se_input: False
+rescale_se_input: True
 # Conv-specific params
 kernel_size: 5
 
@@ -47,24 +47,24 @@ kernel_size: 5
 ## OPTIMIZER params
 optimizer_class: Adam
 optimizer_kwargs:
-  lr: 2e-5
+  lr: 1e-5
   # See https://arxiv.org/pdf/2105.05246.pdf
   eps: 0.0003
-min_lr_mod: 0.01
+min_lr_mod: 1.
 
 ## LOSS params
-entropy_cost: 0.0002
+entropy_cost: 2e-5
 baseline_cost: 1.
 teacher_kl_cost: 0.001
 teacher_baseline_cost: 0.0
 # lambda parameter for TD-lambda and UPGO losses
-lmb: 0.5
+lmb: 0.9
 reduction: sum
 
 # Pretrained model for KL loss
 use_teacher: True
-teacher_load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/09-10/23-19-53/
-teacher_checkpoint_file: 18449152.pt
+teacher_load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/10-02/11-29-02/
+teacher_checkpoint_file: 20000192.pt
 
 # MISCELLANEOUS params
 actor_device: cuda:1
@@ -75,7 +75,7 @@ model_log_freq: 100
 sharing_strategy: file_descriptor
 
 # Continue from previous run
-load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/09-10/23-19-53/
-checkpoint_file: 18449152.pt
+load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/10-02/11-29-02/
+checkpoint_file: 20000192.pt
 weights_only: True
 n_value_warmup_batches: 0
