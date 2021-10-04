@@ -22,4 +22,5 @@ MAX_RESOURCE = {
     # https://github.com/Lux-AI-Challenge/Lux-Design-2021/blob/master/src/Game/gen.ts#L269
     Constants.RESOURCE_TYPES.URANIUM: 350.
 }
+MAP_SIZES = ((12, 12), (16, 16), (24, 24), (32, 32))
 MAX_BOARD_SIZE = (32, 32)

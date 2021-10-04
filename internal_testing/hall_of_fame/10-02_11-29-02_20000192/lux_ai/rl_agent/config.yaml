@@ -3,9 +3,8 @@ project: Lux_AI_2021
 entity: isaiahpressman
 group: after_september_patch
 act_space: BasicActionSpace
-obs_space: FixedShapeContinuousObs
-obs_space_kwargs:
-  include_subtask_encoding: false
+obs_space: FixedShapeContinuousObsV2
+obs_space_kwargs: {}
 reward_space: GameResultReward
 reward_space_kwargs: {}
 total_steps: 20000000.0
@@ -17,31 +16,34 @@ discounting: 0.999
 model_arch: conv_model
 n_blocks: 24
 hidden_dim: 128
+embedding_dim: 32
 n_merge_layers: 1
 normalize: false
-use_index_select: true
+use_index_select: false
 rescale_value_input: true
+rescale_se_input: true
 kernel_size: 5
 optimizer_class: Adam
 optimizer_kwargs:
-  lr: 2.5e-05
+  lr: 1.5e-05
   eps: 0.0003
-min_lr_mod: 0.01
+min_lr_mod: 1.0
 entropy_cost: 0.0002
 baseline_cost: 1.0
 teacher_kl_cost: 0.001
-lmb: 0.5
+teacher_baseline_cost: 0.0
+lmb: 0.85
 reduction: sum
 use_teacher: true
-teacher_load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/09-07/01-44-10/
-teacher_checkpoint_file: 10088000.pt
+teacher_load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/09-30/12-17-18/
+teacher_checkpoint_file: 13701568.pt
 actor_device: cuda:1
 learner_device: cuda:0
 disable_wandb: false
 model_log_freq: 100
 sharing_strategy: file_descriptor
-load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/09-10/13-55-48/
-checkpoint_file: 12233728.pt
+load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/10-01/15-27-32/
+checkpoint_file: 10756544.pt
 weights_only: false
 n_value_warmup_batches: 0
 seed: null
@@ -51,4 +53,3 @@ clip_grads: 10.0
 checkpoint_freq: 10.0
 num_learner_threads: 1
 debug: false
-rescale_se_input: false

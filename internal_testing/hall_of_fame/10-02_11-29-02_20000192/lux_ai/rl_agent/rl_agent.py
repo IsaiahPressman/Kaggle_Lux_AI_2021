@@ -55,10 +55,10 @@ class RLAgent:
         )
         reward_space = create_reward_space(self.model_flags)
         env = wrappers.RewardSpaceWrapper(env, reward_space)
-        env = env.obs_space.wrap_env(env, reward_space)
+        env = env.obs_space.wrap_env(env)
         env = wrappers.PadFixedShapeEnv(env)
         env = wrappers.VecEnv([env])
-        # We'll move the data onto the target device necessary after preprocessing
+        # We'll move the data onto the target device if necessary after preprocessing
         env = wrappers.PytorchEnv(env, torch.device("cpu"))
         env = wrappers.DictEnv(env)
         self.env = env
@@ -94,7 +94,7 @@ class RLAgent:
         # Logging
         self.stopwatch = Stopwatch()
 
-    def __call__(self, obs, conf) -> List[str]:
+    def __call__(self, obs, conf, raw_model_output: bool = False):
         self.stopwatch.reset()
 
         self.stopwatch.start("Observation processing")
@@ -118,9 +118,16 @@ class RLAgent:
                 "baseline": agent_output_augmented["baseline"].mean(dim=0, keepdim=True).cpu()
             }
             agent_output["actions"] = {
-                key: models.DictActor.logits_to_actions(val, sample=False, actions_per_square=None)
+                key: models.DictActor.logits_to_actions(
+                    torch.flatten(val, start_dim=0, end_dim=-2),
+                    sample=False,
+                    actions_per_square=None
+                ).view(*val.shape[:-1], -1)
                 for key, val in agent_output["policy_logits"].items()
             }
+        # Used for debugging and visualization
+        if raw_model_output:
+            return agent_output
 
         self.stopwatch.stop().start("Collision detection")
         if self.agent_flags.use_collision_detection:
@@ -346,9 +353,9 @@ class RLAgent:
         return self.unwrapped_env.game_state
 
     # Helper functions for debugging
-    def set_to_turn(self, obs, conf, turn: int):
-        self.game_state.turn = turn - 1
-        self(obs, conf)
+    def set_to_turn_and_call(self, turn: int, *args, **kwargs):
+        self.game_state.turn = max(turn - 1, 0)
+        return self(*args, **kwargs)
 
 
 def agent(obs, conf) -> List[str]:
