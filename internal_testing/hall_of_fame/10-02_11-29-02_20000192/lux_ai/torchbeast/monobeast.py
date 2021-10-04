@@ -42,7 +42,6 @@ from ..utils import flags_to_namespace
 
 
 KL_DIV_LOSS = nn.KLDivLoss(reduction="none")
-# TODO: Reformat logging
 logging.basicConfig(
     format=(
         "[%(levelname)s:%(process)d %(module)s:%(lineno)d %(asctime)s] " "%(message)s"
@@ -51,7 +50,7 @@ logging.basicConfig(
 )
 
 
-def combine_policy_logits_to_log_probs(
+def DEPRECATED_combine_policy_logits_to_log_probs(
         behavior_policy_logits: torch.Tensor,
         actions: torch.Tensor,
         actions_taken_mask: torch.Tensor
@@ -59,8 +58,8 @@ def combine_policy_logits_to_log_probs(
     """
     Combines all policy_logits at a given step to get a single action_log_probs value for that step
 
-    Initial shape: time, batch, 1, players, x, y
-    Returned shape: time, batch, players
+    Initial shape: time, batch, 1, players, x, y, logits_dim
+    Returned shape: time, batch, players, logits_dim
     """
     # DEPRECATED incorrect (but effective?) way of doing things:
     """
@@ -99,6 +98,51 @@ def combine_policy_logits_to_log_probs(
     return torch.flatten(log_probs, start_dim=-2, end_dim=-1).sum(dim=-1).squeeze(dim=-2)
 
 
+def combine_policy_logits_to_log_probs(
+        behavior_policy_logits: torch.Tensor,
+        actions: torch.Tensor,
+        actions_taken_mask: torch.Tensor
+) -> torch.Tensor:
+    """
+    Combines all policy_logits at a given step to get a single action_log_probs value for that step
+
+    Initial shape: time, batch, 1, players, x, y, n_actions
+    Returned shape: time, batch, players
+    """
+    # Get the action probabilities
+    probs = F.softmax(behavior_policy_logits, dim=-1)
+    # Ignore probabilities for actions that were not used
+    probs = actions_taken_mask * probs
+    # Select the probabilities for actions that were taken by stacked agents and sum these
+    selected_probs = torch.gather(probs, -1, actions)
+    # Convert the probs to conditional probs, since we sample without replacement
+    remaining_probability_density = 1. - torch.cat([
+        torch.zeros(
+            (*selected_probs.shape[:-1], 1),
+            device=selected_probs.device,
+            dtype=selected_probs.dtype
+        ),
+        selected_probs[..., :-1].cumsum(dim=-1)
+    ], dim=-1)
+    # Avoid division by zero
+    remaining_probability_density = remaining_probability_density + torch.where(
+        remaining_probability_density == 0,
+        torch.ones_like(remaining_probability_density),
+        torch.zeros_like(remaining_probability_density)
+    )
+    conditional_selected_probs = selected_probs / remaining_probability_density
+    # Remove 0-valued conditional_selected_probs in order to eliminate neg-inf valued log_probs
+    conditional_selected_probs = conditional_selected_probs + torch.where(
+        conditional_selected_probs == 0,
+        torch.ones_like(conditional_selected_probs),
+        torch.zeros_like(conditional_selected_probs)
+    )
+    log_probs = torch.log(conditional_selected_probs)
+    # Sum over actions, y and x dimensions to combine log_probs from different actions
+    # Squeeze out action_planes dimension as well
+    return torch.flatten(log_probs, start_dim=-3, end_dim=-1).sum(dim=-1).squeeze(dim=-2)
+
+
 def combine_policy_entropy(
         policy_logits: torch.Tensor,
         actions_taken_mask: torch.Tensor
@@ -108,7 +152,7 @@ def combine_policy_entropy(
     NB: We are just computing the sum of individual entropies, not the joint entropy, because I don't think there is
     an efficient way to compute the joint entropy?
 
-    Initial shape: time, batch, action_planes, players, x, y
+    Initial shape: time, batch, action_planes, players, x, y, n_actions
     Returned shape: time, batch, players
     """
     policy = F.softmax(policy_logits, dim=-1)
@@ -153,7 +197,7 @@ def reduce(losses: torch.Tensor, reduction: str) -> torch.Tensor:
         raise ValueError(f"Reduction must be one of 'sum' or 'mean', was: {reduction}")
 
 
-def compute_baseline_loss(value_targets: torch.Tensor, values: torch.Tensor, reduction: str) -> torch.Tensor:
+def compute_baseline_loss(values: torch.Tensor, value_targets: torch.Tensor, reduction: str) -> torch.Tensor:
     baseline_loss = F.smooth_l1_loss(values, value_targets.detach(), reduction="none")
     return reduce(baseline_loss, reduction=reduction)
 
@@ -173,12 +217,13 @@ def compute_policy_gradient_loss(
 
 @torch.no_grad()
 def act(
-    flags: SimpleNamespace,
-    actor_index: int,
-    free_queue: mp.SimpleQueue,
-    full_queue: mp.SimpleQueue,
-    actor_model: torch.nn.Module,
-    buffers: Buffers,
+        flags: SimpleNamespace,
+        teacher_flags: Optional[SimpleNamespace],
+        actor_index: int,
+        free_queue: mp.SimpleQueue,
+        full_queue: mp.SimpleQueue,
+        actor_model: torch.nn.Module,
+        buffers: Buffers,
 ):
     if flags.debug:
         catch_me = AssertionError
@@ -188,7 +233,7 @@ def act(
         logging.info("Actor %i started.", actor_index)
         timings = prof.Timings()
 
-        env = create_env(flags, device=flags.actor_device)
+        env = create_env(flags, device=flags.actor_device, teacher_flags=teacher_flags)
         if flags.seed is not None:
             env.seed(flags.seed + actor_index * flags.n_actor_envs)
         else:
@@ -400,23 +445,36 @@ def learn(
                 reduction=flags.reduction
             )
             baseline_loss = compute_baseline_loss(
-                td_lambda_returns.vs,
                 values,
+                td_lambda_returns.vs,
                 reduction=flags.reduction
             )
             teacher_kl_loss = flags.teacher_kl_cost * reduce(
                 combined_teacher_kl_loss,
                 reduction=flags.reduction
             )
+            if flags.use_teacher:
+                teacher_baseline_loss = flags.teacher_baseline_cost * compute_baseline_loss(
+                    values,
+                    teacher_outputs["baseline"],
+                    reduction=flags.reduction
+                )
+            else:
+                teacher_baseline_loss = torch.zeros_like(baseline_loss)
             entropy_loss = flags.entropy_cost * reduce(
                 combined_learner_entropy,
                 reduction=flags.reduction
             )
             if baseline_only:
-                total_loss = baseline_loss
+                total_loss = baseline_loss + teacher_baseline_loss
                 vtrace_pg_loss, upgo_pg_loss, teacher_kl_loss, entropy_loss = torch.zeros(4) + float("nan")
             else:
-                total_loss = vtrace_pg_loss + upgo_pg_loss + baseline_loss + teacher_kl_loss + entropy_loss
+                total_loss = (vtrace_pg_loss +
+                              upgo_pg_loss +
+                              baseline_loss +
+                              teacher_kl_loss +
+                              teacher_baseline_loss +
+                              entropy_loss)
 
             last_lr = lr_scheduler.get_last_lr()
             assert len(last_lr) == 1, 'Logging per-parameter LR still needs support'
@@ -466,6 +524,7 @@ def learn(
                     "upgo_pg_loss": upgo_pg_loss.detach().item(),
                     "baseline_loss": baseline_loss.detach().item(),
                     "teacher_kl_loss": teacher_kl_loss.detach().item(),
+                    "teacher_baseline_loss": teacher_baseline_loss.detach().item(),
                     "entropy_loss": entropy_loss.detach().item(),
                     "total_loss": total_loss.detach().item(),
                 },
@@ -518,15 +577,26 @@ def train(flags):
     t = flags.unroll_length
     b = flags.batch_size
 
-    example_info = create_env(flags, torch.device("cpu")).reset(force=True)["info"]
-    buffers = create_buffers(flags, example_info)
+    if flags.use_teacher:
+        teacher_flags = OmegaConf.load(Path(flags.teacher_load_dir) / "config.yaml")
+        teacher_flags = flags_to_namespace(OmegaConf.to_container(teacher_flags))
+    else:
+        teacher_flags = None
+
+    example_env = create_env(flags, torch.device("cpu"), teacher_flags=teacher_flags)
+    buffers = create_buffers(
+        flags,
+        example_env.unwrapped[0].obs_space,
+        example_env.reset(force=True)["info"]
+    )
+    del example_env
 
     if flags.load_dir:
         checkpoint_state = torch.load(Path(flags.load_dir) / flags.checkpoint_file, map_location=torch.device("cpu"))
     else:
         checkpoint_state = None
 
-    actor_model = create_model(flags, flags.actor_device)
+    actor_model = create_model(flags, flags.actor_device, teacher_model_flags=teacher_flags, is_teacher_model=False)
     if checkpoint_state is not None:
         actor_model.load_state_dict(checkpoint_state["model_state_dict"])
     actor_model.eval()
@@ -544,6 +614,7 @@ def train(flags):
             target=act,
             args=(
                 flags,
+                teacher_flags,
                 i,
                 free_queue,
                 full_queue,
@@ -555,7 +626,7 @@ def train(flags):
         actor_processes.append(actor)
         time.sleep(0.5)
 
-    learner_model = create_model(flags, flags.learner_device)
+    learner_model = create_model(flags, flags.learner_device, teacher_model_flags=teacher_flags, is_teacher_model=False)
     if checkpoint_state is not None:
         learner_model.load_state_dict(checkpoint_state["model_state_dict"])
     learner_model.train()
@@ -572,11 +643,15 @@ def train(flags):
 
     # Load teacher model for KL loss
     if flags.use_teacher:
-        if flags.teacher_kl_cost <= 0.:
-            raise ValueError("It does not make sense to use teacher when teacher_kl_cost <= 0.")
-        teacher_flags = OmegaConf.load(Path(flags.teacher_load_dir) / "config.yaml")
-        teacher_flags = flags_to_namespace(OmegaConf.to_container(teacher_flags))
-        teacher_model = create_model(teacher_flags, flags.learner_device)
+        if flags.teacher_kl_cost <= 0. and flags.teacher_baseline_cost <= 0.:
+            raise ValueError("It does not make sense to use teacher when teacher_kl_cost <= 0 "
+                             "and teacher_baseline_cost <= 0")
+        teacher_model = create_model(
+            flags,
+            flags.learner_device,
+            teacher_model_flags=teacher_flags,
+            is_teacher_model=True
+        )
         teacher_model.load_state_dict(
             torch.load(
                 Path(flags.teacher_load_dir) / flags.teacher_checkpoint_file,
@@ -589,12 +664,16 @@ def train(flags):
         if flags.teacher_kl_cost > 0.:
             logging.warning(f"flags.teacher_kl_cost is {flags.teacher_kl_cost}, but use_teacher is False. "
                             f"Setting flags.teacher_kl_cost to 0.")
+        if flags.teacher_baseline_cost > 0.:
+            logging.warning(f"flags.teacher_baseline_cost is {flags.teacher_baseline_cost}, but use_teacher is False. "
+                            f"Setting flags.teacher_baseline_cost to 0.")
         flags.teacher_kl_cost = 0.
+        flags.teacher_baseline_cost = 0.
 
     def lr_lambda(epoch):
         min_pct = flags.min_lr_mod
         pct_complete = min(epoch * t * b, flags.total_steps) / flags.total_steps
-        scaled_pct_complete = pct_complete * (1. - min_pct) + min_pct
+        scaled_pct_complete = pct_complete * (1. - min_pct)
         return 1. - scaled_pct_complete
 
     grad_scaler = amp.GradScaler()

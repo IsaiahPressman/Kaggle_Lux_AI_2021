@@ -1,3 +1,5 @@
+import sys
+
 import gym.spaces
 import numpy as np
 import torch
@@ -41,9 +43,11 @@ class ConvEmbeddingInputLayer(nn.Module):
             self,
             obs_space: gym.spaces.Dict,
             embedding_dim: int,
+            out_dim: int,
             n_merge_layers: int = 1,
             use_index_select: bool = True,
-            activation: Callable = nn.LeakyReLU
+            activation: Callable = nn.LeakyReLU,
+            obs_space_prefix: str = ""
     ):
         super(ConvEmbeddingInputLayer, self).__init__()
 
@@ -51,10 +55,20 @@ class ConvEmbeddingInputLayer(nn.Module):
         n_continuous_channels = 0
         n_embedding_channels = 0
         self.keys_to_op = {}
-        for key, val in obs_space.spaces.items():
+        self.obs_space_prefix = obs_space_prefix
+        for orig_key, val in obs_space.spaces.items():
             assert val.shape[0] == 1
+            # Used when performing inference with multiple models with different obs spaces on a single MultiObs env
+            if self.obs_space_prefix:
+                if orig_key.startswith(self.obs_space_prefix):
+                    key = orig_key[len(obs_space_prefix):]
+                else:
+                    continue
+            else:
+                key = orig_key
+
             if key.endswith("_COUNT"):
-                if key[:-6] not in obs_space.spaces.keys():
+                if orig_key[:-6] not in obs_space.spaces.keys():
                     raise ValueError(f"{key} was found in obs_space without an associated {key[:-6]}.")
                 self.keys_to_op[key] = "count"
             elif isinstance(val, gym.spaces.MultiBinary) or isinstance(val, gym.spaces.MultiDiscrete):
@@ -96,18 +110,18 @@ class ConvEmbeddingInputLayer(nn.Module):
                 activation()
             ])
             merger_layers.extend([
-                nn.Conv2d(embedding_dim * 2, embedding_dim * 2, (1, 1)),
+                nn.Conv2d(out_dim * 2, out_dim * 2, (1, 1)),
                 activation()
             ])
         continuous_space_embedding_layers.extend([
-            nn.Conv2d(n_continuous_channels, embedding_dim, (1, 1)),
+            nn.Conv2d(n_continuous_channels, out_dim, (1, 1)),
             activation()
         ])
         embedding_merger_layers.extend([
-            nn.Conv2d(n_embedding_channels, embedding_dim, (1, 1)),
+            nn.Conv2d(n_embedding_channels, out_dim, (1, 1)),
             activation()
         ])
-        merger_layers.append(nn.Conv2d(embedding_dim * 2, embedding_dim, (1, 1)))
+        merger_layers.append(nn.Conv2d(out_dim * 2, out_dim, (1, 1)))
         self.continuous_space_embedding = nn.Sequential(*continuous_space_embedding_layers)
         self.embedding_merger = nn.Sequential(*embedding_merger_layers)
         self.merger = nn.Sequential(*merger_layers)
@@ -125,7 +139,7 @@ class ConvEmbeddingInputLayer(nn.Module):
         embedding_outs = {}
         for key, op in self.keys_to_op.items():
             # Input should be of size (b, n, p|1, x, y) OR (b, n, p|1)
-            in_tensor = x[key]
+            in_tensor = x[self.obs_space_prefix + key]
             assert in_tensor.shape[2] <= 2
             # First we duplicate each batch entry and swap player axes when relevant
             in_tensor = in_tensor[
