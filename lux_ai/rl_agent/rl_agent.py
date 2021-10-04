@@ -58,7 +58,7 @@ class RLAgent:
         env = env.obs_space.wrap_env(env)
         env = wrappers.PadFixedShapeEnv(env)
         env = wrappers.VecEnv([env])
-        # We'll move the data onto the target device necessary after preprocessing
+        # We'll move the data onto the target device if necessary after preprocessing
         env = wrappers.PytorchEnv(env, torch.device("cpu"))
         env = wrappers.DictEnv(env)
         self.env = env

@@ -62,7 +62,7 @@ def get_default_flags(flags: DictConfig) -> DictConfig:
     return OmegaConf.create(flags)
 
 
-@hydra.main(config_path="conf", config_name="conv_config")
+@hydra.main(config_path="conf", config_name="continuation_config")
 def main(flags: DictConfig):
     cli_conf = OmegaConf.from_cli()
     if Path("config.yaml").exists():
@@ -75,9 +75,8 @@ def main(flags: DictConfig):
         # this is useful e.g. if you did total_steps=N before and want to increase it
         logging.info("Loading existing configuration, we're continuing a previous run")
         new_flags = OmegaConf.load(Path(flags.load_dir) / "config.yaml")
-        new_flags.load_dir = flags.load_dir
-        new_flags.checkpoint_file = flags.checkpoint_file
-        new_flags.weights_only = flags.weights_only
+        # Overwrite some parameters
+        new_flags = OmegaConf.merge(new_flags, flags)
         flags = OmegaConf.merge(new_flags, cli_conf)
 
     flags = get_default_flags(flags)
