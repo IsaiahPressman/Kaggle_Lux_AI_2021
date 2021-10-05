@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from subprocess import Popen
 import tqdm
-from typing import NoReturn, Optional
+from typing import NoReturn, Optional, Tuple, Union
 
 MAP_SIZES = (12, 16, 24, 32)
 
@@ -47,7 +47,7 @@ def main(
         out_dir: Optional[str] = None,
         n_workers: int = 3,
         n_games: int = 100,
-        cuda_visible_devices: str = "0",
+        cuda_visible_devices: Union[int, Tuple[int, ...]] = (0,),
 ) -> NoReturn:
     agent_1 = Path(agent_1)
     agent_2 = Path(agent_2)
@@ -65,7 +65,9 @@ def main(
 
     print(f"Running tournament between {agent_1_name}.py and {agent_2_name}.py")
     assert n_games % len(MAP_SIZES) == 0, f"n_games must be evenly divisible by {len(MAP_SIZES)}, was {n_games}"
-    os.environ["CUDA_VISIBLE_DEVICES"] = cuda_visible_devices
+    if type(cuda_visible_devices) == int:
+        cuda_visible_devices = (cuda_visible_devices,)
+    os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(d) for d in cuda_visible_devices)
 
     n_games_per_map = n_games // len(MAP_SIZES)
     game_commands = []
