@@ -21,3 +21,4 @@ lux_ai/rl_agent_2/
 *.tar.gz
 # Retired internal testing agents
 internal_testing/hall_of_fame/retired/
+internal_testing/internal_agents/retired/
