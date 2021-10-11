@@ -7,11 +7,13 @@ hydra:
     dir: ./outputs/${now:%m-%d}/${now:%H-%M-%S}
 
 # Parameters to overwrite
-lmb: 0.85
+#total_steps: 4e7
+#teacher_load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/10-08/17-35-45/
+#teacher_checkpoint_file: 20000192.pt
 
 # Continue from previous run
-load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/10-01/15-27-32/
-checkpoint_file: 10756544.pt
+load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/10-10/16-00-01/
+checkpoint_file: 01491520.pt
 weights_only: False
 
 # Convenience for debugging

@@ -63,8 +63,8 @@ reduction: sum
 
 # Pretrained model for KL loss
 use_teacher: True
-teacher_load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/10-02/11-29-02/
-teacher_checkpoint_file: 20000192.pt
+teacher_load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/10-04/00-05-58/
+teacher_checkpoint_file: 11764672.pt
 
 # MISCELLANEOUS params
 actor_device: cuda:1
@@ -75,7 +75,7 @@ model_log_freq: 100
 sharing_strategy: file_descriptor
 
 # Continue from previous run
-load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/10-02/11-29-02/
-checkpoint_file: 20000192.pt
+load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/10-04/00-05-58/
+checkpoint_file: 11764672.pt
 weights_only: True
 n_value_warmup_batches: 0
