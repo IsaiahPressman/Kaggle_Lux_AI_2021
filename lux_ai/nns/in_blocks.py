@@ -1,5 +1,3 @@
-import sys
-
 import gym.spaces
 import numpy as np
 import torch
@@ -27,6 +25,24 @@ def _get_select_func(use_index_select: bool) -> Callable:
         return _forward_select
 
 
+def _player_sum(x: torch.Tensor) -> torch.Tensor:
+    return x.sum(dim=1)
+
+
+def _player_cat(x: torch.Tensor) -> torch.Tensor:
+    return torch.flatten(x, start_dim=1, end_dim=2)
+
+
+def _get_player_embedding_merge_func(sum_player_embeddings: bool) -> Callable:
+    """
+    Whether to sum or concatenate player and opponent embeddings
+    """
+    if sum_player_embeddings:
+        return _player_sum
+    else:
+        return _player_cat
+
+
 class DictInputLayer(nn.Module):
     @staticmethod
     def forward(
@@ -45,6 +61,7 @@ class ConvEmbeddingInputLayer(nn.Module):
             embedding_dim: int,
             out_dim: int,
             n_merge_layers: int = 1,
+            sum_player_embeddings: bool = True,
             use_index_select: bool = True,
             activation: Callable = nn.LeakyReLU,
             obs_space_prefix: str = ""
@@ -88,7 +105,10 @@ class ConvEmbeddingInputLayer(nn.Module):
                 n_players = val.shape[1]
                 n_embeddings = n_players * (n_embeddings - 1) + 1
                 embeddings[key] = nn.Embedding(n_embeddings, embedding_dim, padding_idx=padding_idx)
-                n_embedding_channels += embedding_dim
+                if sum_player_embeddings:
+                    n_embedding_channels += embedding_dim
+                else:
+                    n_embedding_channels += embedding_dim * n_players
                 self.keys_to_op[key] = "embedding"
             elif isinstance(val, gym.spaces.Box):
                 n_continuous_channels += np.prod(val.shape[:2])
@@ -125,6 +145,7 @@ class ConvEmbeddingInputLayer(nn.Module):
         self.continuous_space_embedding = nn.Sequential(*continuous_space_embedding_layers)
         self.embedding_merger = nn.Sequential(*embedding_merger_layers)
         self.merger = nn.Sequential(*merger_layers)
+        self.player_embedding_merge_func = _get_player_embedding_merge_func(sum_player_embeddings)
         self.select = _get_select_func(use_index_select)
 
     def forward(self, x: Tuple[Dict[str, torch.Tensor], torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -182,7 +203,7 @@ class ConvEmbeddingInputLayer(nn.Module):
                 if len(out.shape) == 3:
                     out = out.unsqueeze(-2).unsqueeze(-2)
                 assert len(out.shape) == 5
-                embedding_outs[key] = out.permute(0, 1, 4, 2, 3).sum(dim=1) * input_mask
+                embedding_outs[key] = self.player_embedding_merge_func(out.permute(0, 1, 4, 2, 3)) * input_mask
             elif op == "continuous":
                 if len(out.shape) == 2:
                     out = out.unsqueeze(-1).unsqueeze(-1)

@@ -37,6 +37,7 @@ hidden_dim: 128
 embedding_dim: 32
 n_merge_layers: 1
 normalize: False
+sum_player_embeddings: False
 use_index_select: False
 rescale_value_input: True
 rescale_se_input: True
@@ -59,21 +60,22 @@ baseline_cost: 1.
 teacher_kl_cost: 0.005
 teacher_baseline_cost: 0.0
 # lambda parameter for TD-lambda and UPGO losses
-lmb: 0.5
+lmb: 0.9
 reduction: sum
 
 # Pretrained model for KL loss
 use_teacher: True
-teacher_load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/09-17/22-05-30/
-teacher_checkpoint_file: 20000128.pt
+teacher_load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/10-10/11-18-12/
+teacher_checkpoint_file: 28576448.pt
 
 # MISCELLANEOUS params
 actor_device: cuda:1
 learner_device: cuda:0
-disable_wandb: False
 model_log_freq: 100
 # file_descriptor or file_system
 sharing_strategy: file_descriptor
+disable_wandb: False
+debug: False
 
 # Continue from previous run
 #load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/09-07/01-44-10/

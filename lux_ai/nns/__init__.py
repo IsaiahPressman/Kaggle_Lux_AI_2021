@@ -48,6 +48,7 @@ def _create_model(
         embedding_dim=flags.embedding_dim,
         out_dim=flags.hidden_dim,
         n_merge_layers=flags.n_merge_layers,
+        sum_player_embeddings=flags.sum_player_embeddings,
         use_index_select=flags.use_index_select,
         obs_space_prefix=obs_space_prefix
     )
