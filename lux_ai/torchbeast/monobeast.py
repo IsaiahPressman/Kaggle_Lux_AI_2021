@@ -50,54 +50,6 @@ logging.basicConfig(
 )
 
 
-def DEPRECATED_combine_policy_logits_to_log_probs(
-        behavior_policy_logits: torch.Tensor,
-        actions: torch.Tensor,
-        actions_taken_mask: torch.Tensor
-) -> torch.Tensor:
-    """
-    Combines all policy_logits at a given step to get a single action_log_probs value for that step
-
-    Initial shape: time, batch, 1, players, x, y, logits_dim
-    Returned shape: time, batch, players, logits_dim
-    """
-    # DEPRECATED incorrect (but effective?) way of doing things:
-    """
-    # Get the log probs
-    log_probs = F.log_softmax(behavior_policy_logits, dim=-1)
-    # Ignore log probs for actions that were not used
-    log_probs = actions_taken_mask * torch.where(
-        ~torch.isneginf(log_probs),
-        log_probs,
-        torch.zeros_like(log_probs)
-    )
-    # Select the log probs for the actions that were taken
-    selected_log_probs = torch.gather(log_probs, -1, actions)
-    # Sum over actions, y, and x dimensions to combine log_probs from different actions
-    # Squeeze out action_planes dimension as well
-    ## This is the problem step - we are summing log probs,
-    ## which is not the same as summing probs and then taking the log
-    return torch.flatten(selected_log_probs, start_dim=-3, end_dim=-1).sum(dim=-1).squeeze(dim=-2)
-    """
-
-    # Get the action probabilities
-    probs = F.softmax(behavior_policy_logits, dim=-1)
-    # Ignore probabilities for actions that were not used
-    probs = actions_taken_mask * probs
-    # Select the probabilities for the overlapping actions that were taken and sum these
-    selected_probs = torch.gather(probs, -1, actions).sum(dim=-1)
-    # Remove 0-valued selected_probs in order to eliminate neg-inf valued log_probs
-    selected_probs = selected_probs + torch.where(
-        selected_probs == 0,
-        torch.ones_like(selected_probs),
-        torch.zeros_like(selected_probs)
-    )
-    log_probs = torch.log(selected_probs)
-    # Sum over y and x dimensions to combine log_probs from different actions
-    # Squeeze out action_planes dimension as well
-    return torch.flatten(log_probs, start_dim=-2, end_dim=-1).sum(dim=-1).squeeze(dim=-2)
-
-
 def combine_policy_logits_to_log_probs(
         behavior_policy_logits: torch.Tensor,
         actions: torch.Tensor,
@@ -200,10 +152,6 @@ def reduce(losses: torch.Tensor, reduction: str) -> torch.Tensor:
 def compute_baseline_loss(values: torch.Tensor, value_targets: torch.Tensor, reduction: str) -> torch.Tensor:
     baseline_loss = F.smooth_l1_loss(values, value_targets.detach(), reduction="none")
     return reduce(baseline_loss, reduction=reduction)
-
-
-def compute_entropy_loss(combined_learner_entropy: torch.Tensor, reduction: str) -> torch.Tensor:
-    return reduce(combined_learner_entropy, reduction)
 
 
 def compute_policy_gradient_loss(
