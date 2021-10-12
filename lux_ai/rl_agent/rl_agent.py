@@ -139,6 +139,8 @@ class RLAgent:
             actions = actions[obs.player]
         self.stopwatch.stop()
 
+        actions.extend(self.get_transfer_annotations(actions))
+
         value = agent_output["baseline"].squeeze().numpy()[obs.player]
         value_msg = f"Turn: {self.game_state.turn} - Predicted value: {value:.2f}"
         timing_msg = f"{str(self.stopwatch)}"
@@ -343,6 +345,19 @@ class RLAgent:
         })
         actions = actions[obs.player]
         return actions
+
+    def get_transfer_annotations(self, actions: List[str]) -> List[str]:
+        annotations = []
+        for act in actions:
+            act_split = act.split(" ")
+            if act_split[0] == "t":
+                unit_from = self.me.get_unit_by_id(act_split[1])
+                unit_to = self.me.get_unit_by_id(act_split[2])
+                if unit_from is None or unit_to is None:
+                    DEBUG_MESSAGE(f"Unrecognized transfer: {act}")
+                    continue
+                annotations.append(annotate.line(unit_from.pos.x, unit_from.pos.y, unit_to.pos.x, unit_to.pos.y))
+        return annotations
 
     @property
     def unwrapped_env(self) -> LuxEnv:
