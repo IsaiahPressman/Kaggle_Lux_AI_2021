@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from .constants import Constants
 from .game_map import Position
@@ -24,6 +24,12 @@ class Player:
     @property
     def city_tiles(self) -> List['CityTile']:
         return [ct for city in self.cities.values() for ct in city.citytiles]
+
+    def get_unit_by_id(self, unit_id: str) -> Optional['Unit']:
+        for unit in self.units:
+            if unit_id == unit.id:
+                return unit
+        return None
 
 
 class City:
