@@ -139,7 +139,9 @@ class RLAgent:
             actions = actions[obs.player]
         self.stopwatch.stop()
 
-        actions.extend(self.get_transfer_annotations(actions))
+        if LOCAL_EVAL:
+            # Add transfer annotations locally
+            actions.extend(self.get_transfer_annotations(actions))
 
         value = agent_output["baseline"].squeeze().numpy()[obs.player]
         value_msg = f"Turn: {self.game_state.turn} - Predicted value: {value:.2f}"
@@ -357,6 +359,7 @@ class RLAgent:
                     DEBUG_MESSAGE(f"Unrecognized transfer: {act}")
                     continue
                 annotations.append(annotate.line(unit_from.pos.x, unit_from.pos.y, unit_to.pos.x, unit_to.pos.y))
+                annotations.append(annotate.x(unit_to.pos.x, unit_to.pos.y))
         return annotations
 
     @property
