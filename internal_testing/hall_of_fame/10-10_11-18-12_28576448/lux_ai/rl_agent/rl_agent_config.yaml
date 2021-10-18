@@ -1,0 +1,19 @@
+device: player_id
+#device: cpu
+
+# Use manual preference based collision detection
+use_collision_detection: True
+# Bans no-ops after the first night until research is complete
+# Has no effect when use_collision_detection is False
+must_research: False
+
+# NB: Kaggle servers are slow and do not provide time for inference on all augmentations
+# For medium (16-layer/128-wide) models, we can only use 2 data augmentations
+# For large (24-layer/128-wide) models, we can only use 1 data augmentation
+data_augmentations:
+  #- player_relative_reflection
+  #- VerticalFlip
+  #- HorizontalFlip
+  #- Rot90
+  - Rot180
+  #- Rot270
