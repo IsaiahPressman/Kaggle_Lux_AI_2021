@@ -197,10 +197,12 @@ class BasicActorCriticNetwork(nn.Module):
         self.base_model = base_model
         self.base_out_channels = base_out_channels
 
-        actor_layers = []
-        baseline_layers = []
         if n_action_value_layers < 2:
             raise ValueError("n_action_value_layers must be >= 2 in order to use spectral_norm")
+
+        """
+        actor_layers = []
+        baseline_layers = []
         for i in range(n_action_value_layers - 1):
             actor_layers.append(
                 nn.utils.spectral_norm(nn.Conv2d(self.base_out_channels, self.base_out_channels, (1, 1)))
@@ -214,7 +216,20 @@ class BasicActorCriticNetwork(nn.Module):
         self.actor_base = nn.Sequential(*actor_layers)
         self.actor = DictActor(self.base_out_channels, action_space)
 
-        self.baseline_base = nn.Sequential(*baseline_layers)
+        self.baseline_base = nn.Sequential(*baseline_layers)"""
+
+        self.actor_base = self.make_spectral_norm_head_base(
+            n_layers=n_action_value_layers,
+            n_channels=self.base_out_channels,
+            activation=actor_critic_activation
+        )
+        self.actor = DictActor(self.base_out_channels, action_space)
+
+        self.baseline_base = self.make_spectral_norm_head_base(
+            n_layers=n_action_value_layers,
+            n_channels=self.base_out_channels,
+            activation=actor_critic_activation
+        )
         self.baseline = BaselineLayer(
             in_channels=self.base_out_channels,
             reward_space=reward_space,
@@ -250,3 +265,23 @@ class BasicActorCriticNetwork(nn.Module):
 
     def select_best_actions(self, *args, **kwargs):
         return self.forward(*args, sample=False, **kwargs)
+
+    @staticmethod
+    def make_spectral_norm_head_base(n_layers: int, n_channels: int, activation: Callable) -> nn.Module:
+        """
+        Returns the base of an action or value head, with the final layer of the base/the semifinal layer of the
+        head spectral normalized.
+        NB: this function actually returns a base with n_layer - 1 layers, leaving the final layer to be filled in
+        with the proper action or value output layer.
+        """
+        assert n_layers >= 2
+        layers = []
+        for i in range(n_layers - 2):
+            layers.append(nn.Conv2d(n_channels, n_channels, (1, 1)))
+            layers.append(activation())
+        layers.append(
+            nn.utils.spectral_norm(nn.Conv2d(n_channels, n_channels, (1, 1)))
+        )
+        layers.append(activation())
+
+        return nn.Sequential(*layers)
