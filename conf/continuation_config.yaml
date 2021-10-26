@@ -37,6 +37,7 @@ hidden_dim: 128
 embedding_dim: 32
 n_merge_layers: 1
 normalize: False
+sum_player_embeddings: False
 use_index_select: False
 rescale_value_input: True
 rescale_se_input: True
@@ -63,8 +64,8 @@ reduction: sum
 
 # Pretrained model for KL loss
 use_teacher: True
-teacher_load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/10-04/00-05-58/
-teacher_checkpoint_file: 11764672.pt
+teacher_load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/10-20/03-00-03/
+teacher_checkpoint_file: 06207104.pt
 
 # MISCELLANEOUS params
 actor_device: cuda:1
@@ -75,7 +76,7 @@ model_log_freq: 100
 sharing_strategy: file_descriptor
 
 # Continue from previous run
-load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/10-04/00-05-58/
-checkpoint_file: 11764672.pt
+load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/10-22/11-38-04/
+checkpoint_file: 29146688.pt
 weights_only: True
 n_value_warmup_batches: 0
