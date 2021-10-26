@@ -7,8 +7,6 @@ __pycache__/
 .directory
 .idea/
 
-# Scraped episodes
-episode_scraping/
 # Hydra experiment outputs
 outputs/
 # Rl agent config and .pt files
