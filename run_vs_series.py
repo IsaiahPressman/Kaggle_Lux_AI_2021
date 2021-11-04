@@ -3,7 +3,9 @@ import math
 import multiprocessing as mp
 import os
 from pathlib import Path
-from subprocess import Popen
+import psutil
+import signal
+from subprocess import Popen, TimeoutExpired
 import tqdm
 from typing import NoReturn, Optional, Tuple, Union
 
@@ -36,9 +38,25 @@ def generate_game_command(
     return " ".join(game_commands_list)
 
 
+def kill(proc_pid: int) -> NoReturn:
+    process = psutil.Process(proc_pid)
+    for proc in process.children(recursive=True):
+        proc.kill()
+    process.kill()
+
+
 def run_game(game_command: str) -> NoReturn:
-    proc = Popen(game_command, shell=True, stdout=open(os.devnull, 'wb'))
-    proc.wait()
+    n = 5
+    for i in range(n):
+        proc = Popen(game_command, shell=True, stdout=open(os.devnull, 'wb'))
+        # Time out if a game doesn't finish after 3 minutes
+        try:
+            proc.wait(180.)
+            return
+        except TimeoutExpired:
+            kill(proc.pid)
+            print(f"\nGame timed out - restarting: {game_command}")
+    print(f"Unable to run game - timed out {n} times: {game_command}")
 
 
 def main(
