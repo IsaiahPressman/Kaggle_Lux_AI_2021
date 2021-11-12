@@ -48,7 +48,7 @@ kernel_size: 5
 ## OPTIMIZER params
 optimizer_class: Adam
 optimizer_kwargs:
-  lr: 1e-5
+  lr: 3e-6
   # See https://arxiv.org/pdf/2105.05246.pdf
   eps: 0.0003
 min_lr_mod: 1.
@@ -64,8 +64,8 @@ reduction: sum
 
 # Pretrained model for KL loss
 use_teacher: True
-teacher_load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/10-20/03-00-03/
-teacher_checkpoint_file: 06207104.pt
+teacher_load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/11-09/21-32-04/
+teacher_checkpoint_file: 59822400.pt
 
 # MISCELLANEOUS params
 actor_device: cuda:1
@@ -76,7 +76,7 @@ model_log_freq: 100
 sharing_strategy: file_descriptor
 
 # Continue from previous run
-load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/10-22/11-38-04/
-checkpoint_file: 29146688.pt
+load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/11-09/21-32-04/
+checkpoint_file: 59822400.pt
 weights_only: True
 n_value_warmup_batches: 0
