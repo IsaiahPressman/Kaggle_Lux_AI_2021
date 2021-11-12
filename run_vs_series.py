@@ -40,9 +40,11 @@ def generate_game_command(
 
 def kill(proc_pid: int) -> NoReturn:
     process = psutil.Process(proc_pid)
-    for proc in process.children(recursive=True):
-        proc.kill()
-    process.kill()
+    for proc in process.children(recursive=True) + [process]:
+        try:
+            proc.kill()
+        except psutil.NoSuchProcess:
+            pass
 
 
 def run_game(game_command: str) -> NoReturn:
