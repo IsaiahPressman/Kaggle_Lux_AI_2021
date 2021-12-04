@@ -4,10 +4,9 @@ import multiprocessing as mp
 import os
 from pathlib import Path
 import psutil
-import signal
 from subprocess import Popen, TimeoutExpired
 import tqdm
-from typing import NoReturn, Optional, Tuple, Union
+from typing import List, NoReturn, Optional, Tuple, Union
 
 MAP_SIZES = (12, 16, 24, 32)
 
@@ -62,19 +61,16 @@ def run_game(game_command: str) -> NoReturn:
 
 
 def main(
-        agent_1: str,
-        agent_2: str,
+        *args,
         out_dir: Optional[str] = None,
         n_workers: int = 3,
         n_games: int = 100,
         cuda_visible_devices: Union[int, Tuple[int, ...]] = (0,),
 ) -> NoReturn:
-    agent_1 = Path(agent_1)
-    agent_2 = Path(agent_2)
-    agent_1_name = f"{agent_1.parent.name}/{agent_1.stem}"
-    agent_2_name = f"{agent_2.parent.name}/{agent_2.stem}"
+    agents = [Path(a) for a in args]
+    agent_names = [f"{a.parent.name}/{a.stem}" for a in agents]
     if out_dir is None:
-        out_dir = f"{agent_1_name.replace('/', '_')}__vs__{agent_2_name.replace('/', '_')}"
+        out_dir = "__vs__".join([f"{name.replace('/', '_')}" for name in agent_names])
     out_dir = Path(out_dir)
 
     print(f"Saving replays to: {out_dir}")
@@ -83,23 +79,31 @@ def main(
     else:
         out_dir.mkdir()
 
-    print(f"Running tournament between {agent_1_name}.py and {agent_2_name}.py")
-    assert n_games % len(MAP_SIZES) == 0, f"n_games must be evenly divisible by {len(MAP_SIZES)}, was {n_games}"
+    print(f"Running tournament between: {[a + '.py' for a in agent_names]}")
+    all_matchups = []
+    for i_1, a_1 in enumerate(agents):
+        for i_2, a_2 in enumerate(agents):
+            if i_1 == i_2:
+                continue
+            all_matchups.append((a_1, a_2))
+    divisor = len(MAP_SIZES) * len(all_matchups)
+    if n_games % divisor != 0:
+        raise ValueError(
+            f"n_games must be evenly divisible by {divisor} ({len(MAP_SIZES)} * {len(all_matchups)}), was {n_games}"
+        )
+
     if type(cuda_visible_devices) == int:
         cuda_visible_devices = (cuda_visible_devices,)
     os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(d) for d in cuda_visible_devices)
 
     n_games_per_map = n_games // len(MAP_SIZES)
     game_commands = []
-    for i in range(n_games // len(MAP_SIZES)):
-        if i % 2 == 0:
-            a1, a2 = agent_1, agent_2
-        else:
-            a1, a2 = agent_2, agent_1
+    for i in range(n_games_per_map):
+        a_1, a_2 = all_matchups[i % len(all_matchups)]
         for map_size in MAP_SIZES:
             game_commands.append(generate_game_command(
-                agent_1=str(a1),
-                agent_2=str(a2),
+                agent_1=str(a_1),
+                agent_2=str(a_2),
                 game_name=f"{str(i).zfill(int(math.log10(n_games_per_map) + 1))}_{map_size}",
                 map_size=map_size,
                 out_dir=out_dir,
