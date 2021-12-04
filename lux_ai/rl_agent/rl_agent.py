@@ -16,6 +16,7 @@ from ..nns import create_model, models
 from ..utils import flags_to_namespace, Stopwatch
 
 from ..lux.game import Game
+from ..lux.game_constants import GAME_CONSTANTS
 from ..lux.game_objects import CityTile, Unit
 from ..lux import annotate
 
@@ -260,8 +261,11 @@ class RLAgent:
                 for i, act in enumerate(actions):
                     illegal_action = False
                     action_meaning = ACTION_MEANINGS["city_tile"][act]
+                    # Check that it is allowed to build carts
+                    if action_meaning == "BUILD_CART" and not self.agent_flags.can_build_carts:
+                        illegal_action = True
                     # Check that the city will not build more units than the unit cap
-                    if action_meaning.startswith("BUILD_"):
+                    elif action_meaning.startswith("BUILD_"):
                         if units_to_build > 0:
                             units_to_build -= 1
                         else:
@@ -282,6 +286,12 @@ class RLAgent:
                             self.agent_flags.must_research
                     ):
                         illegal_action = True
+                    # Ban all non-unit-creating actions on the final step
+                    if self.game_state.turn >= GAME_CONSTANTS["PARAMETERS"]["MAX_DAYS"] - 1:
+                        if action_meaning == "BUILD_CART":
+                            illegal_action = False
+                        else:
+                            illegal_action = True
                     if illegal_action:
                         my_flat_log_probs["city_tile"][loc, act] = float("-inf")
                     else:
