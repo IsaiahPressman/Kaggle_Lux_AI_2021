@@ -1,0 +1,25 @@
+graph TD
+    subgraph Convolutional Block
+    Input --> sum[Sum]
+    Input --> C1[5x5 Conv2D]
+    C1 --> act1[LeakyReLU]
+    act1 --> C2[5x5 Conv2D]
+    C2 --> SE[Squeeze Excitation]
+    SE --> sum
+    sum --> act2[LeakyReLU]
+    act2 --> out_block[Output]
+    end
+
+    subgraph Input Encoder
+    cont[Continuous Observations] ---> conv_cat[Concatenate]
+    conv_cat --> conv_cont[1x1 Conv2D]
+    conv_cont --> act_cont[LeakyReLU]
+    emb[Discrete Observations] --> embedding[Embedding layers]
+    embedding --> emb_cat[Concatenate]
+    emb_cat --> conv_emb[1x1 Conv2D]
+    conv_emb --> act_emb[LeakyReLU]
+    act_cont --> cat_2[Concatenate]
+    act_emb --> cat_2
+    cat_2 --> conv[1x1 Conv2D]
+    conv --> out_in[Output]
+    end
