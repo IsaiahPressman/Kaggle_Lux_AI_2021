@@ -157,6 +157,11 @@ class RLAgent:
         # Do not call manual_step on the first turn, or you will be off-by-1 turn the entire game
         if obs["step"] > 0:
             self.unwrapped_env.manual_step(obs["updates"])
+            # need to update turn with obs, otherwise things get messed up if
+            # you give the agent obs out of strict order
+            self.game_state.turn = obs["step"]
+            # I use this in the visualisation code, so need it to be set correctly
+            self.game_state.id = obs["player"]
 
         self.me = self.game_state.players[obs.player]
         self.opp = self.game_state.players[(obs.player + 1) % 2]
