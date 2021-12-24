@@ -17,16 +17,11 @@ group: after_september_patch
 
 ## ENV params
 act_space: BasicActionSpace
-obs_space: FixedShapeContinuousObs
+obs_space: FixedShapeContinuousObsV2
 obs_space_kwargs:
   include_subtask_encoding: False
 reward_space: GameResultReward
 reward_space_kwargs: {}
-  #early_stop: True
-  #city: 2.
-  #unit: 1.
-  #fuel: 0.
-  #step: 0.005
 
 ## TRAINING params
 total_steps: 2e7
@@ -40,8 +35,11 @@ discounting: 0.999
 model_arch: conv_model
 n_blocks: 16
 hidden_dim: 128
+embedding_dim: 32
 n_merge_layers: 1
 normalize: False
+sum_player_embeddings: False
+use_index_select: False
 rescale_value_input: True
 rescale_se_input: True
 # Conv-specific params
@@ -67,8 +65,8 @@ reduction: sum
 
 # Pretrained model for KL loss
 use_teacher: True
-teacher_load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/09-01/17-03-16/
-teacher_checkpoint_file: 05756672.pt
+teacher_load_dir: <FOLDER_CONTAINING_TRAINED_PHASE2_MODEL> # E.g. .../outputs/09-01/09-58-50/
+teacher_checkpoint_file: <MODEL_WEIGHTS_FILE> # E.g. 05079552.pt
 
 # MISCELLANEOUS params
 actor_device: cuda:1
@@ -77,9 +75,3 @@ disable_wandb: False
 model_log_freq: 100
 # file_descriptor or file_system
 sharing_strategy: file_descriptor
-
-# Continue from previous run
-#load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/09-01/09-58-50/
-#checkpoint_file: 05079552.pt
-#weights_only: True
-#n_value_warmup_batches: 2000
