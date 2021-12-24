@@ -23,7 +23,7 @@ reward_space: GameResultReward
 reward_space_kwargs: {}
 
 ## TRAINING params
-total_steps: 1e9
+total_steps: 2e7
 num_actors: 2
 n_actor_envs: 16
 unroll_length: 16
@@ -48,15 +48,16 @@ kernel_size: 5
 ## OPTIMIZER params
 optimizer_class: Adam
 optimizer_kwargs:
-  lr: 1e-5
+  lr: 5e-5
   # See https://arxiv.org/pdf/2105.05246.pdf
   eps: 0.0003
-min_lr_mod: 1.
+  #alpha: 0.9
+min_lr_mod: 0.01
 
 ## LOSS params
-entropy_cost: 2e-6
+entropy_cost: 0.0002
 baseline_cost: 1.
-teacher_kl_cost: 0.001
+teacher_kl_cost: 0.005
 teacher_baseline_cost: 0.0
 # lambda parameter for TD-lambda and UPGO losses
 lmb: 0.9
@@ -64,19 +65,21 @@ reduction: sum
 
 # Pretrained model for KL loss
 use_teacher: True
-teacher_load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/11-18/20-32-30/
-teacher_checkpoint_file: 26530944.pt
+teacher_load_dir: <FOLDER_CONTAINING_TRAINED_PHASE4/5+_MODEL> # E.g. .../outputs/09-01/09-58-50/
+teacher_checkpoint_file: <MODEL_WEIGHTS_FILE> # E.g. 05079552.pt
 
 # MISCELLANEOUS params
 actor_device: cuda:1
 learner_device: cuda:0
-disable_wandb: False
 model_log_freq: 100
 # file_descriptor or file_system
 sharing_strategy: file_descriptor
+disable_wandb: False
+debug: False
 
-# Continue from previous run
-load_dir: /Windows/Users/isaia/Documents/GitHub/Kaggle/Lux_AI_2021/outputs/11-19/22-33-31/
-checkpoint_file: 32611008.pt
+# Continue from previous run - used for loading weights from last iteration of phase 5
+# Comment out these lines when first starting phase 5
+load_dir: <FOLDER_CONTAINING_TRAINED_PHASE5+_MODEL> # E.g. .../outputs/09-01/09-58-50/
+checkpoint_file: <MODEL_WEIGHTS_FILE> # E.g. 05079552.pt
 weights_only: True
 n_value_warmup_batches: 0
